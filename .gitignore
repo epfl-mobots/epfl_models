@@ -1,0 +1,58 @@
+build/
+*.dat
+.idea/
+.vscode/
+*.user
+source/messages/msg/
+source/robot-control/model/
+
+# skip simulation output folders
+*_*-*-*_*_*_*
+
+# project specific
+sim_*
+
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# QtCreator
+fish_in_ring.config
+fish_in_ring.creator
+fish_in_ring.creator.user
+fish_in_ring.files
+fish_in_ring.includes
+
+# waf
+.*waf*
+*.pyc
+__pycache__
