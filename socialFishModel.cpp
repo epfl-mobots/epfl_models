@@ -66,10 +66,10 @@ namespace Fishmodel {
 
     SocialFishModel::SocialFishModel(Simulation& simulation, Agent* agent)
         : Behavior(simulation, agent),
-          //        ARENA_CENTER({RobotControlSettings::get().setupMap().polygon().center().x(),
-          //                                                     RobotControlSettings::get().setupMap().polygon().center().y()}),
+          //          ARENA_CENTER({RobotControlSettings::get().setupMap().polygon().center().x(),
+          //              RobotControlSettings::get().setupMap().polygon().center().y()}),
           ARENA_CENTER({0.300, 0.295}),
-          RADIUS(0.245)
+          RADIUS(0.237)
     {
         reinit();
     }
@@ -130,12 +130,12 @@ namespace Fishmodel {
                 ++_heading_failed_attempts;
             else
                 _heading_failed_attempts = 0;
-            if (_heading_failed_attempts
-                > 3 * static_cast<int>(std::ceil(1 / _simulation.dt))) { // robot is stuck
-                _position = _approximate_discrete_pos(_agent->headPos, _agent->tailPos);
-                _position = (_position + _heading) % static_cast<int>(_num_cells);
-                if (_position < 0)
-                    _position += _num_cells;
+            if (_heading_failed_attempts > 3 * static_cast<int>(std::ceil(1 / _simulation.dt))) { //
+                robot is stuck
+                    // attempt to move in the other direction for a while to get
+                    unstuck _next_heading
+                    = reverse_heading(_heading);
+                std::cout << "robot is stuck" << std::endl;
             }
         }
         _update_history();
@@ -164,6 +164,8 @@ namespace Fishmodel {
                 sum_hdg += est;
             }
             _estimated_heading = to_heading(sum_hdg);
+            if (_estimated_heading == Heading::UNDEFINED)
+                _estimated_heading = _heading;
             _position_history.clear();
             _history_count = 0;
         }
