@@ -130,11 +130,9 @@ namespace Fishmodel {
                 ++_heading_failed_attempts;
             else
                 _heading_failed_attempts = 0;
-            if (_heading_failed_attempts > 3 * static_cast<int>(std::ceil(1 / _simulation.dt))) { //
-                robot is stuck
-                    // attempt to move in the other direction for a while to get
-                    unstuck _next_heading
-                    = reverse_heading(_heading);
+            if (_heading_failed_attempts > 3 * static_cast<int>(std::ceil(1 / _simulation.dt))) {
+                // robot is stuck attempt to move in the other direction for a while to get unstuck
+                _next_heading = reverse_heading(_heading);
                 std::cout << "robot is stuck" << std::endl;
             }
         }
