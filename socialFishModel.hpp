@@ -90,6 +90,7 @@ namespace Fishmodel {
         std::map<int, float> _deg2cell;
 
         CoordinatesConversionPtr _coordinatesConversion;
+        const Coord_t MIN_XY;
         const Coord_t ARENA_CENTER;
         const double RADIUS;
 

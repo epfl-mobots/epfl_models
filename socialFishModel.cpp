@@ -66,10 +66,12 @@ namespace Fishmodel {
 
     SocialFishModel::SocialFishModel(Simulation& simulation, Agent* agent)
         : Behavior(simulation, agent),
-          //          ARENA_CENTER({RobotControlSettings::get().setupMap().polygon().center().x(),
-          //              RobotControlSettings::get().setupMap().polygon().center().y()}),
-          ARENA_CENTER({0.300, 0.295}),
-          RADIUS(0.237)
+          MIN_XY({-0.221247, -0.165585}),
+          ARENA_CENTER(
+              {RobotControlSettings::get().setupMap().polygon().center().x() - MIN_XY.first,
+                  RobotControlSettings::get().setupMap().polygon().center().y() - MIN_XY.second}),
+          //          ARENA_CENTER({0.300, 0.295}),
+          RADIUS(0.24)
     {
         reinit();
     }
