@@ -62,8 +62,8 @@ namespace Fishmodel {
         int _influence_alpha;
         Heading _heading_bias;
 
-        // model private member funcs
-    private:
+        // model member funcs
+    protected:
         void _my_group();
         float _social_influence();
 
@@ -74,13 +74,13 @@ namespace Fishmodel {
         int _position;
         int _speed;
 
-        // discretization specific private member funcs
+        // discretization specific member funcs
     public:
         int _target_reset_threshold;
         int _history_reset;
         int _heading_failed_attempts;
 
-    private:
+    protected:
         float _approximate_angle(const Coord_t& head_p, const Coord_t& tail_p) const;
         int _approximate_discrete_pos(const Coord_t& head_p, const Coord_t& tail_p) const;
         void _create_deg_to_cell_map();
@@ -90,6 +90,7 @@ namespace Fishmodel {
         std::map<int, float> _deg2cell;
 
         CoordinatesConversionPtr _coordinatesConversion;
+        const Coord_t MIN_XY;
         const Coord_t ARENA_CENTER;
         const double RADIUS;
 

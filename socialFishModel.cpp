@@ -35,11 +35,11 @@ namespace samsar {
                     boost::irange(ff_social->position() + ff_social->heading() * cells_forward,
                         ff_social->position() - ff_social->heading(), -ff_social->heading()));
                 std::vector<int> backward;
-                boost::push_back(
-                    backward, boost::irange(ff_social->position() - ff_social->heading(),
-                                  ff_social->position() + (-ff_social->heading() * cells_backward)
-                                      - ff_social->heading(),
-                                  -ff_social->heading()));
+                boost::push_back(backward,
+                    boost::irange(ff_social->position() - ff_social->heading(),
+                        ff_social->position() + (-ff_social->heading() * cells_backward)
+                            - ff_social->heading(),
+                        -ff_social->heading()));
                 std::for_each(forward.begin(), forward.end(),
                     [&](int& v) { (v < 0) ? v += num_cells : v %= num_cells; });
                 std::for_each(backward.begin(), backward.end(),
@@ -66,10 +66,11 @@ namespace Fishmodel {
 
     SocialFishModel::SocialFishModel(Simulation& simulation, Agent* agent)
         : Behavior(simulation, agent),
-          //        ARENA_CENTER({RobotControlSettings::get().setupMap().polygon().center().x(),
-          //                                                     RobotControlSettings::get().setupMap().polygon().center().y()}),
-          ARENA_CENTER({0.300, 0.295}),
-          RADIUS(0.245)
+          MIN_XY({-0.221247, -0.165585}),
+          ARENA_CENTER(
+              {RobotControlSettings::get().setupMap().polygon().center().x() - MIN_XY.first,
+                  RobotControlSettings::get().setupMap().polygon().center().y() - MIN_XY.second}),
+          RADIUS(0.24)
     {
         reinit();
     }
@@ -276,10 +277,12 @@ namespace Fishmodel {
         //            : v %= _num_cells; });
 
         std::vector<int> pos;
-        boost::push_back(pos, boost::irange(_position + 1,
-                                  _position + _heading * _cells_forward + _heading, _heading));
-        boost::push_back(pos, boost::irange(_position + (-_heading * _cells_backward),
-                                  _position + _heading, _heading));
+        boost::push_back(pos,
+            boost::irange(
+                _position + 1, _position + _heading * _cells_forward + _heading, _heading));
+        boost::push_back(pos,
+            boost::irange(
+                _position + (-_heading * _cells_backward), _position + _heading, _heading));
         std::for_each(
             pos.begin(), pos.end(), [&](int& v) { (v < 0) ? v += _num_cells : v %= _num_cells; });
 
