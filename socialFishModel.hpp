@@ -19,6 +19,7 @@ namespace Fishmodel {
     public:
         SocialFishModel(Simulation& simulation, Agent* agent = nullptr);
 
+        void init();
         virtual void reinit() override;
         virtual void step() override;
 
@@ -62,8 +63,8 @@ namespace Fishmodel {
         int _influence_alpha;
         Heading _heading_bias;
 
-        // model private member funcs
-    private:
+        // model member funcs
+    protected:
         void _my_group();
         float _social_influence();
 
@@ -74,13 +75,13 @@ namespace Fishmodel {
         int _position;
         int _speed;
 
-        // discretization specific private member funcs
+        // discretization specific member funcs
     public:
         int _target_reset_threshold;
         int _history_reset;
         int _heading_failed_attempts;
 
-    private:
+    protected:
         float _approximate_angle(const Coord_t& head_p, const Coord_t& tail_p) const;
         int _approximate_discrete_pos(const Coord_t& head_p, const Coord_t& tail_p) const;
         void _create_deg_to_cell_map();

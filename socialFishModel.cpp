@@ -73,38 +73,43 @@ namespace Fishmodel {
           //          ARENA_CENTER({0.300, 0.295}),
           RADIUS(0.24)
     {
+        init();
+    }
+
+    void SocialFishModel::init()
+    {
+        _num_cells = 40;
+        _group_threshold = 3;
+        _cells_forward = 5;
+        _cells_backward = 8;
+        _min_speed = 1;
+        _max_speed = 1;
+        _prob_obey = 0.94f;
+        _prob_move = 0.901f;
+        _prob_change_speed = 0.1f;
+        _heading_change_duration = 10;
+        _sum_weight = {0.3f, -2.0f};
+        _influence_alpha = 10;
+        _heading_bias = Heading::UNDEFINED;
+
+        _target_reset_threshold = 3;
+        _history_reset = 5;
+
         reinit();
     }
 
     void SocialFishModel::reinit()
     {
-        _num_cells = 40;
-        _group_threshold = 3;
-        _cells_forward = 5;
-        _cells_backward = 5;
-        _min_speed = 1;
-        _max_speed = 1;
-        _prob_obey = 1.0f;
-        _prob_move = 0.901f;
-        _prob_change_speed = 0.1f;
-        _heading_change_duration = 3;
-        _sum_weight = {0.3f, -2.0f};
-        _influence_alpha = 4;
-        _heading_bias = Heading::UNDEFINED;
-
         _heading = random_heading();
         _next_heading = _heading;
         _heading_change = false;
         _speed = tools::random_in_range(_min_speed, _max_speed);
 
-        _target_reset_threshold = 3;
         _heading_change_count = 0;
-        _history_reset = 5;
         _history_count = 0;
         _heading_failed_attempts = 0;
 
         _create_deg_to_cell_map();
-
         _position = _approximate_discrete_pos(_agent->headPos, _agent->tailPos);
     }
 
