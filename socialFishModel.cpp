@@ -35,11 +35,11 @@ namespace samsar {
                     boost::irange(ff_social->position() + ff_social->heading() * cells_forward,
                         ff_social->position() - ff_social->heading(), -ff_social->heading()));
                 std::vector<int> backward;
-                boost::push_back(
-                    backward, boost::irange(ff_social->position() - ff_social->heading(),
-                                  ff_social->position() + (-ff_social->heading() * cells_backward)
-                                      - ff_social->heading(),
-                                  -ff_social->heading()));
+                boost::push_back(backward,
+                    boost::irange(ff_social->position() - ff_social->heading(),
+                        ff_social->position() + (-ff_social->heading() * cells_backward)
+                            - ff_social->heading(),
+                        -ff_social->heading()));
                 std::for_each(forward.begin(), forward.end(),
                     [&](int& v) { (v < 0) ? v += num_cells : v %= num_cells; });
                 std::for_each(backward.begin(), backward.end(),
@@ -123,8 +123,9 @@ namespace Fishmodel {
         else {
             int current_pos = _approximate_discrete_pos(_agent->headPos, _agent->tailPos);
             int dist = std::abs(current_pos - _position);
-            if (dist > static_cast<int>(_num_cells / 2))
-                dist = 40 - std::max(current_pos, _position) + std::min(current_pos, _position);
+
+            if (dist > static_cast<int>(_num_cells) / 2)
+                dist = std::abs(static_cast<int>(_num_cells) - dist);
             if (dist > _target_reset_threshold) {
                 _position = _approximate_discrete_pos(_agent->headPos, _agent->tailPos);
                 _position = (_position + _target_reset_threshold * _heading)
@@ -161,9 +162,8 @@ namespace Fishmodel {
             for (size_t i = 0; i < _position_history.size() - 1; ++i) {
                 int diff = _position_history[i + 1] - _position_history[i];
                 Heading est = to_heading(diff);
-                if ((diff <= -static_cast<int>(_num_cells) / 2)
-                    || (diff > static_cast<int>(_num_cells) / 2))
-                    est = reverse_heading(est);
+                if (std::abs(diff) > static_cast<int>(_num_cells) / 2)
+                    est = to_heading(reverse_heading(est) * sgn(_num_cells - std::abs(diff)));
                 else
                     avg_pos += _position_history[i];
                 sum_hdg += est;
@@ -270,23 +270,13 @@ namespace Fishmodel {
 
     void SocialFishModel::_my_group()
     {
-        //        int current_pos = _approximate_discrete_pos(_agent->headPos,
-        //        _agent->tailPos); std::vector<int> pos; boost::push_back(pos,
-        //        boost::irange(current_pos + 1,
-        //                                  current_pos + _heading * _cells_forward +
-        //                                  _heading, _heading));
-        //        boost::push_back(pos, boost::irange(current_pos + (-_heading *
-        //        _cells_backward),
-        //                                  current_pos + _heading, _heading));
-        //        std::for_each(
-        //            pos.begin(), pos.end(), [&](int& v) { (v < 0) ? v += _num_cells
-        //            : v %= _num_cells; });
-
         std::vector<int> pos;
-        boost::push_back(pos, boost::irange(_position + 1,
-                                  _position + _heading * _cells_forward + _heading, _heading));
-        boost::push_back(pos, boost::irange(_position + (-_heading * _cells_backward),
-                                  _position + _heading, _heading));
+        boost::push_back(pos,
+            boost::irange(
+                _position + 1, _position + _heading * _cells_forward + _heading, _heading));
+        boost::push_back(pos,
+            boost::irange(
+                _position + (-_heading * _cells_backward), _position + _heading, _heading));
         std::for_each(
             pos.begin(), pos.end(), [&](int& v) { (v < 0) ? v += _num_cells : v %= _num_cells; });
 
@@ -313,13 +303,6 @@ namespace Fishmodel {
         // i.e. in its field of view. Fish that do not see a lot of neighbors in front
         // of them have higher probability to change direction, while ones that have
         // a lot of fish in front of them, are less prone to disobey the group.
-
-        //        int current_pos = _approximate_discrete_pos(_agent->headPos,
-        //        _agent->tailPos); std::vector<int> pos; boost::push_back(pos,
-        //        boost::irange(current_pos,
-        //                                  current_pos + _heading * _cells_forward +
-        //                                  _heading, _heading));
-
         std::vector<int> pos;
         boost::push_back(pos,
             boost::irange(_position, _position + _heading * _cells_forward + _heading, _heading));

@@ -30,6 +30,8 @@ namespace Fishmodel {
         Heading heading() const { return _heading; }
         Heading estimated_heading() const { return _estimated_heading; }
 
+        template <typename T> int sgn(T val) { return (T(0) < val) - (val < T(0)); }
+
     protected:
         virtual void _stimulate();
         virtual void _move();
