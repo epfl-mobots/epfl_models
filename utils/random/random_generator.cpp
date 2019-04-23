@@ -1,6 +1,6 @@
 #include "random_generator.hpp"
 
-namespace samsar {
+namespace simu {
     namespace tools {
 
         int8_t random_sgn()
@@ -12,4 +12,4 @@ namespace samsar {
         }
 
     } // namespace tools
-} // namespace samsar
+} // namespace simu

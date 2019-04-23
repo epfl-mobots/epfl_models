@@ -1,6 +1,6 @@
 #include "heading.hpp"
 
-namespace samsar {
+namespace simu {
     namespace types {
 
         std::string to_str(Heading heading)
@@ -39,4 +39,4 @@ namespace samsar {
         Heading random_heading() { return to_heading(tools::random_sgn()); }
 
     } // namespace types
-} // namespace samsar
+} // namespace simu

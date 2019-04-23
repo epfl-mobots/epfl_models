@@ -13,7 +13,7 @@
 #include <eigen3/Eigen/Core>
 #include <memory>
 
-namespace samsar {
+namespace simu {
     namespace types {
         struct WeightFunc : public defaults::WeightFunc {
             WeightFunc(const std::vector<float> w) : defaults::WeightFunc(w)
@@ -60,7 +60,7 @@ namespace samsar {
             }
         };
     } // namespace types
-} // namespace samsar
+} // namespace simu
 
 namespace Fishmodel {
 

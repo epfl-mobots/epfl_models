@@ -9,10 +9,12 @@
 
 namespace Fishmodel {
 
-    using namespace samsar;
+    using namespace simu;
     using namespace types;
 
-    enum PositionDescription : int { UNDEFINED = 0, FRONT = 1, BACK = 2 };
+    enum PositionDescription : int { UNDEFINED = 0,
+        FRONT = 1,
+        BACK = 2 };
 
     struct State {
         State() {}
@@ -38,7 +40,8 @@ namespace Fishmodel {
 
         real_t euclidean_distance(const Coord_t& p1, const Coord_t& p2) const;
 
-        template <typename T> T to_360(T theta)
+        template <typename T>
+        T to_360(T theta)
         {
             if (theta < 0)
                 return 360 + theta;

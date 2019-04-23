@@ -17,6 +17,9 @@ std::pair<Agent*, Behavior*> EpflSimulationFactory::_createAgent(std::string con
     else if (behaviorType == "DPT") {
         b = new DensestPointModel(*_sim, a);
     }
+    else if (behaviorType == "TM") {
+        b = new ToulouseModel(*_sim, a);
+    }
     else {
         b = new Behavior(*_sim, a);
     }

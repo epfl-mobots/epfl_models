@@ -17,6 +17,7 @@
 #include "model.hpp"
 #include "socialFishModel.hpp"
 #include "zones.hpp"
+#include "toulouseModel.hpp"
 
 namespace Fishmodel {
 
