@@ -46,6 +46,8 @@ namespace Fishmodel {
         void free_will(
             const_state_t state, const std::tuple<double, double>& model_out, const std::vector<int>& idcs);
 
+        Position<double> position() const;
+
         double time_kicker() const;
 
         double time() const;

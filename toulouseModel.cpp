@@ -16,36 +16,60 @@
 namespace Fishmodel {
 
     ToulouseModel::ToulouseModel(Simulation& simulation, Agent* agent)
-        : Behavior(simulation, agent),
-          ARENA_CENTER({0.293, 0.29})
+        : Behavior(simulation, agent), ARENA_CENTER({0.3093, 0.2965})
     {
         init();
     }
 
-    void ToulouseModel::init()
-    {
-        reinit();
-    }
+    void ToulouseModel::init() { reinit(); }
 
     void ToulouseModel::reinit()
     {
         _time = 0;
+        _position.x = ARENA_CENTER.first;
+        _position.y = ARENA_CENTER.second;
     }
 
     void ToulouseModel::step()
     {
-        qDebug() << "<<<<<<<<<<<<<<<<<" << _id << " here ";
+#if 0
+        qDebug() << _agent->headPos.first << " " << _agent->headPos.second;
+
+        _position.x = _agent->headPos.first;
+        _position.y = _agent->headPos.second;
+
+        _agent->headPos.first = ARENA_CENTER.first + 0.29 * std::cos(_time * M_PI / 180);
+        _agent->headPos.second = ARENA_CENTER.second + 0.29 * std::sin(_time * M_PI / 180);
+        _agent->direction = 0;
+
+        _time += 5;
+        if (_time > 360)
+            _time = 0;
+        _agent->updateAgentPosition(_simulation.dt);
+
+#else
+
+        _speed.vx = (_agent->headPos.first - _position.x) / _simulation.dt;
+        _speed.vy = (_agent->headPos.second - _position.y) / _simulation.dt;
 
         _position.x = _agent->headPos.first - ARENA_CENTER.first;
         _position.y = _agent->headPos.second - ARENA_CENTER.second;
-        _speed.vx = (_agent->headPos.first - ARENA_CENTER.first - _position.x) / _simulation.dt;
-        _speed.vy = (_agent->headPos.second - ARENA_CENTER.second - _position.y) / _simulation.dt;
-        _angular_direction = _agent->direction;
+
+        _angular_direction = angle_to_pipi(_agent->direction);
 
         std::pair<Agent*, Behavior*> current_agent(_agent, this);
-        auto result = std::find(_simulation.robots.begin(), _simulation.robots.end(), current_agent);
-        if (result == _simulation.robots.end())
+        auto result
+            = std::find(_simulation.robots.begin(), _simulation.robots.end(), current_agent);
+        if (result == _simulation.robots.end()) {
+            qDebug() << "fish " << _position.x << " " << _position.y << " " << _agent->direction
+                     << " " << angle_to_pipi(_agent->direction);
             return;
+        }
+        qDebug() << "robot " << _position.x << " " << _position.y << " " << _agent->direction << " "
+                 << angle_to_pipi(_agent->direction);
+
+        //        std::cout << "v " << _speed.vx << " " << _speed.vy << std::endl;
+        //        std::cout << "p " << _position.x << " " << _position.y << std::endl;
 
         _is_kicking = true;
 
@@ -71,6 +95,7 @@ namespace Fishmodel {
         move();
 
         _is_kicking = false;
+#endif
     }
 
     void ToulouseModel::stimulate()
@@ -85,8 +110,7 @@ namespace Fishmodel {
 
     void ToulouseModel::interact()
     {
-        // auto rsim = std::static_pointer_cast<RummySimulation>(sim);
-        int num_fish = _simulation.agents.size();
+        int num_fish = _simulation.fishes.size();
 
         // kicker advancing to the new position
         _position = _desired_position;
@@ -106,12 +130,8 @@ namespace Fishmodel {
         // compute influence from the environment to the focal fish
         Eigen::VectorXd influence = Eigen::VectorXd::Zero(num_fish);
         for (int i = 0; i < num_fish; ++i) {
-            if (i == _id)
-                continue;
-
             double attraction = wall_distance_attractor(distances(i), radius)
-                * wall_perception_attractor(perception(i))
-                * wall_angle_attractor(phis(i));
+                * wall_perception_attractor(perception(i)) * wall_angle_attractor(phis(i));
 
             double alignment = alignment_distance_attractor(distances(i), radius)
                 * alignment_perception_attractor(perception(i))
@@ -137,7 +157,8 @@ namespace Fishmodel {
         double qx, qy;
         do {
             stepper(); // decide on the next kick length, duration, peak velocity
-            free_will({distances, perception, thetas, phis}, {r_w, theta_w}, idcs); // throw in some free will
+            free_will({distances, perception, thetas, phis}, {r_w, theta_w},
+                idcs); // throw in some free will
 
             // rejection test -- don't want to hit the wall
             qx = _desired_position.x + (_kick_length + body_length) * std::cos(_angular_direction);
@@ -147,15 +168,21 @@ namespace Fishmodel {
 
     void ToulouseModel::move()
     {
-        _agent->headPos.first = _position.x + ARENA_CENTER.first;
-        _agent->headPos.second = _position.y + ARENA_CENTER.second;
-        _agent->speed = (_agent->headPos.first * _agent->headPos.first + _agent->headPos.second * _agent->headPos.second + 2 * std::abs(_agent->headPos.first) * std::abs(_agent->headPos.second) * std::cos(std::atan2(_agent->headPos.second, _agent->headPos.first)));
+        _position.x += ARENA_CENTER.first;
+        _position.y += ARENA_CENTER.second;
+
+        _agent->headPos.first = _position.x;
+        _agent->headPos.second = _position.y;
+        _agent->speed = (std::pow(_speed.vx, 2) + std::pow(_speed.vy, 2)
+                            + 2 * std::abs(_speed.vx) * std::abs(_speed.vy)
+                                * std::cos(std::atan2(_speed.vy, _speed.vx)))
+            / _simulation.dt;
         _agent->updateAgentPosition(_simulation.dt);
     }
 
     state_t ToulouseModel::compute_state() const
     {
-        size_t num_fish = _simulation.agents.size();
+        size_t num_fish = _simulation.fishes.size();
 
         Eigen::VectorXd distances(num_fish);
         Eigen::VectorXd perception(num_fish);
@@ -163,17 +190,15 @@ namespace Fishmodel {
         Eigen::VectorXd phis(num_fish);
 
         for (uint i = 0; i < num_fish; ++i) {
-            double posx = _simulation.agents[i].first->headPos.first - ARENA_CENTER.first;
-            double posy = _simulation.agents[i].first->headPos.second - ARENA_CENTER.second;
-            double direction = _simulation.agents[i].first->direction;
+            auto fish = reinterpret_cast<ToulouseModel*>(_simulation.fishes[i].second);
+            double posx = fish->position().x;
+            double posy = fish->position().y;
+            double direction = fish->angular_direction();
 
             distances(i) = std::sqrt(
-                std::pow(_desired_position.x - posx, 2)
-                + std::pow(_desired_position.y - posy, 2));
+                std::pow(_desired_position.x - posx, 2) + std::pow(_desired_position.y - posy, 2));
 
-            thetas(i) = std::atan2(
-                posy - _desired_position.y,
-                posx - _desired_position.x);
+            thetas(i) = std::atan2(posy - _desired_position.y, posx - _desired_position.x);
 
             perception(i) = angle_to_pipi(thetas(i) - _angular_direction);
 
@@ -188,8 +213,6 @@ namespace Fishmodel {
     {
         std::vector<int> neigh_idcs;
         for (int i = 0; i < values.rows(); ++i) {
-            if (i == kicker_idx)
-                continue;
             neigh_idcs.push_back(i);
         }
 
@@ -217,8 +240,8 @@ namespace Fishmodel {
         _kick_length = _peak_velocity * tau0 * (1. - std::exp(-_kick_duration / tau0));
     }
 
-    void ToulouseModel::free_will(
-        const_state_t state, const std::tuple<double, double>& model_out, const std::vector<int>& idcs)
+    void ToulouseModel::free_will(const_state_t state, const std::tuple<double, double>& model_out,
+        const std::vector<int>& idcs)
     {
         double r_w, theta_w;
         Eigen::VectorXd distances, perception, thetas, phis;
@@ -229,10 +252,12 @@ namespace Fishmodel {
             * std::sin(2. * M_PI * tools::random_in_range(0., 1.));
 
         double q = 1. * alpha
-            * wall_distance_interaction(gamma_wall, wall_interaction_range, r_w, radius) / gamma_wall;
+            * wall_distance_interaction(gamma_wall, wall_interaction_range, r_w, radius)
+            / gamma_wall;
 
         double dphi_rand = gamma_rand * (1. - q) * g;
-        double dphi_wall = wall_distance_interaction(gamma_wall, wall_interaction_range, r_w, radius)
+        double dphi_wall
+            = wall_distance_interaction(gamma_wall, wall_interaction_range, r_w, radius)
             * wall_angle_interaction(theta_w);
 
         double dphi_attraction = 0;
@@ -240,8 +265,7 @@ namespace Fishmodel {
         for (int j = 0; j < perceived_agents; ++j) {
             int fidx = idcs[j];
             dphi_attraction += wall_distance_attractor(distances(fidx), radius)
-                * wall_perception_attractor(perception(fidx))
-                * wall_angle_attractor(phis(fidx));
+                * wall_perception_attractor(perception(fidx)) * wall_angle_attractor(phis(fidx));
             dphi_ali += alignment_distance_attractor(distances(fidx), radius)
                 * alignment_perception_attractor(perception(fidx))
                 * alignment_angle_attractor(phis(fidx));
@@ -261,10 +285,7 @@ namespace Fishmodel {
     }
 
     double ToulouseModel::wall_distance_interaction(
-        double gamma_wall,
-        double wall_interaction_range,
-        double ag_radius,
-        double radius) const
+        double gamma_wall, double wall_interaction_range, double ag_radius, double radius) const
     {
         double x = std::max(0., ag_radius);
         return gamma_wall * std::exp(-std::pow(x / wall_interaction_range, 2));
@@ -322,6 +343,8 @@ namespace Fishmodel {
         } while (std::abs(difference) > M_PI);
         return difference;
     }
+
+    Position<double> ToulouseModel::position() const { return _position; }
 
     double ToulouseModel::time_kicker() const { return _time + _kick_duration; }
 
