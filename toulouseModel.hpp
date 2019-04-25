@@ -14,20 +14,19 @@
 #include <eigen3/Eigen/Core>
 
 #include <map>
+#include <mutex>
 
 namespace Fishmodel {
 
     using namespace simu;
     using namespace types;
 
-    enum Order {
-        DECREASING,
-        INCREASING
-    };
+    enum Order { DECREASING, INCREASING };
 
     class ToulouseModel;
     using state_t = std::tuple<Eigen::VectorXd, Eigen::VectorXd, Eigen::VectorXd, Eigen::VectorXd>;
-    using const_state_t = const std::tuple<Eigen::VectorXd, Eigen::VectorXd, Eigen::VectorXd, Eigen::VectorXd>&;
+    using const_state_t
+        = const std::tuple<Eigen::VectorXd, Eigen::VectorXd, Eigen::VectorXd, Eigen::VectorXd>&;
 
     class ToulouseModel : public Behavior {
     public:
@@ -43,8 +42,8 @@ namespace Fishmodel {
 
         void stepper();
         std::tuple<double, double> model_stepper(double radius) const;
-        void free_will(
-            const_state_t state, const std::tuple<double, double>& model_out, const std::vector<int>& idcs);
+        void free_will(const_state_t state, const std::tuple<double, double>& model_out,
+            const std::vector<int>& idcs);
 
         Position<double> position() const;
 
@@ -82,8 +81,8 @@ namespace Fishmodel {
         double time_coef;
 
     protected:
-        double wall_distance_interaction(
-            double gamma_wall, double wall_interaction_range, double ag_radius, double radius) const;
+        double wall_distance_interaction(double gamma_wall, double wall_interaction_range,
+            double ag_radius, double radius) const;
         double wall_angle_interaction(double theta) const;
 
         double wall_distance_attractor(double distance, double radius) const;
@@ -95,8 +94,8 @@ namespace Fishmodel {
         double alignment_angle_attractor(double phi) const;
 
         state_t compute_state() const;
-        std::vector<int> sort_neighbours(
-            const Eigen::VectorXd& values, const int kicker_idx, Order order = Order::INCREASING) const;
+        std::vector<int> sort_neighbours(const Eigen::VectorXd& values, const int kicker_idx,
+            Order order = Order::INCREASING) const;
 
         double angle_to_pipi(double difference) const;
 
@@ -114,6 +113,9 @@ namespace Fishmodel {
         double _kick_duration;
         double _time;
         int _id;
+
+        std::mutex _mtx;
+        std::vector<Coord_t> _trajectory;
 
         CoordinatesConversionPtr _coordinatesConversion;
         const Coord_t ARENA_CENTER;
