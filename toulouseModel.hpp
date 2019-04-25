@@ -21,8 +21,7 @@ namespace Fishmodel {
     using namespace simu;
     using namespace types;
 
-    enum Order { DECREASING,
-        INCREASING };
+    enum Order { DECREASING, INCREASING };
 
     class ToulouseModel;
     using state_t = std::tuple<Eigen::VectorXd, Eigen::VectorXd, Eigen::VectorXd, Eigen::VectorXd>;
@@ -113,6 +112,7 @@ namespace Fishmodel {
         double _peak_velocity;
         double _kick_length;
         double _kick_duration;
+        double _current_time;
         double _time;
         int _id;
 

@@ -20,10 +20,11 @@ namespace Fishmodel {
         : Behavior(simulation, agent),
           // clang-format off
           ARENA_CENTER(
-              {0.3093, 0.2965}
-              // 0.262, 0.255}
+//              {0.3093, 0.2965}
+               {0.262, 0.255}
+
               // clang-format on
-          )
+              )
     {
         init();
     }
@@ -33,6 +34,7 @@ namespace Fishmodel {
     void ToulouseModel::reinit()
     {
         _time = 0;
+        _current_time = 0;
 
         if (perceived_agents >= _simulation.agents.size()) {
             qDebug() << "Correcting the number of perceived individuals to N-1";
@@ -175,7 +177,8 @@ namespace Fishmodel {
             qx = _desired_position.x + (_kick_length + body_length) * std::cos(_angular_direction);
             qy = _desired_position.y + (_kick_length + body_length) * std::sin(_angular_direction);
 
-            qDebug() << std::sqrt(qx * qx + qy * qy) << " " << qx << " " << qy << " " << _position.x << " " << _position.y;
+            qDebug() << std::sqrt(qx * qx + qy * qy) << " " << qx << " " << qy << " " << _position.x
+                     << " " << _position.y;
         } while (std::sqrt(qx * qx + qy * qy) > radius);
     }
 
@@ -190,11 +193,8 @@ namespace Fishmodel {
 
         _agent->headPos.first = _position.x + ARENA_CENTER.first;
         _agent->headPos.second = _position.y + ARENA_CENTER.second;
-        _agent->speed = (std::pow(_speed.vx, 2) + std::pow(_speed.vy, 2)
-                            + 2 * std::abs(_speed.vx) * std::abs(_speed.vy)
-                                * std::cos(std::atan2(_speed.vy, _speed.vx)))
-            / _simulation.dt;
-        _agent->updateAgentPosition(_simulation.dt);
+        //        _agent->updateAgentPosition(_simulation.dt);
+        _agent->updateAgentPosition(_kick_duration);
     }
 
     state_t ToulouseModel::compute_state() const
