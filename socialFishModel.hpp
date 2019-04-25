@@ -12,13 +12,14 @@
 
 namespace Fishmodel {
 
-    using namespace samsar;
+    using namespace simu;
     using namespace types;
 
     class SocialFishModel : public Behavior {
     public:
         SocialFishModel(Simulation& simulation, Agent* agent = nullptr);
 
+        void init();
         virtual void reinit() override;
         virtual void step() override;
 
@@ -28,6 +29,9 @@ namespace Fishmodel {
         int position() const { return _position; }
         Heading heading() const { return _heading; }
         Heading estimated_heading() const { return _estimated_heading; }
+
+        template <typename T>
+        int sgn(T val) { return (T(0) < val) - (val < T(0)); }
 
     protected:
         virtual void _stimulate();
@@ -102,7 +106,7 @@ namespace Fishmodel {
 
 } // namespace Fishmodel
 
-namespace samsar {
+namespace simu {
     namespace types {
         using namespace Fishmodel;
 
@@ -166,6 +170,6 @@ namespace samsar {
             std::vector<size_t> _idcs;
         };
     } // namespace types
-} // namespace samsar
+} // namespace simu
 
 #endif // SOCIALFISHMODEL_HPP

@@ -11,11 +11,14 @@
 #include <string>
 #include <vector>
 
-namespace samsar {
+namespace simu {
     namespace types {
-        enum Heading : int { CLOCKWISE = -1, UNDEFINED = 0, COUNTER_CLOCKWISE = 1 };
+        enum Heading : int { CLOCKWISE = -1,
+            UNDEFINED = 0,
+            COUNTER_CLOCKWISE = 1 };
 
-        template <typename T> Heading to_heading(T candidate)
+        template <typename T>
+        Heading to_heading(T candidate)
         {
             if (candidate == 0)
                 return Heading::UNDEFINED;
@@ -25,7 +28,7 @@ namespace samsar {
                 return Heading::CLOCKWISE;
         }
 
-        //        Heading to_heading(const std::string& hdg);
+        Heading to_heading(const std::string& hdg);
 
         std::string to_str(Heading heading);
         Heading reverse_heading(Heading hdg);
@@ -33,6 +36,6 @@ namespace samsar {
         Heading random_heading();
 
     } // namespace types
-} // namespace samsar
+} // namespace simu
 
 #endif

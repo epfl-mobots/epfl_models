@@ -13,7 +13,7 @@
 #include <eigen3/Eigen/Core>
 #include <memory>
 
-namespace samsar {
+namespace simu {
     namespace types {
         struct WeightFunc : public defaults::WeightFunc {
             WeightFunc(const std::vector<float> w) : defaults::WeightFunc(w)
@@ -60,7 +60,7 @@ namespace samsar {
             }
         };
     } // namespace types
-} // namespace samsar
+} // namespace simu
 
 namespace Fishmodel {
 
@@ -70,40 +70,46 @@ namespace Fishmodel {
           ARENA_CENTER(
               {RobotControlSettings::get().setupMap().polygon().center().x() - MIN_XY.first,
                   RobotControlSettings::get().setupMap().polygon().center().y() - MIN_XY.second}),
+          //          ARENA_CENTER({0.300, 0.295}),
           RADIUS(0.24)
     {
+        init();
+    }
+
+    void SocialFishModel::init()
+    {
+        _num_cells = 40;
+        _group_threshold = 3;
+        _cells_forward = 5;
+        _cells_backward = 8;
+        _min_speed = 1;
+        _max_speed = 1;
+        _prob_obey = 0.94f;
+        _prob_move = 0.901f;
+        _prob_change_speed = 0.1f;
+        _heading_change_duration = 10;
+        _sum_weight = {0.3f, -2.0f};
+        _influence_alpha = 10;
+        _heading_bias = Heading::UNDEFINED;
+
+        _target_reset_threshold = 3;
+        _history_reset = 5;
+
         reinit();
     }
 
     void SocialFishModel::reinit()
     {
-        _num_cells = 40;
-        _group_threshold = 3;
-        _cells_forward = 5;
-        _cells_backward = 5;
-        _min_speed = 1;
-        _max_speed = 1;
-        _prob_obey = 1.0f;
-        _prob_move = 0.901f;
-        _prob_change_speed = 0.1f;
-        _heading_change_duration = 3;
-        _sum_weight = {0.3f, -2.0f};
-        _influence_alpha = 4;
-        _heading_bias = Heading::UNDEFINED;
-
         _heading = random_heading();
         _next_heading = _heading;
         _heading_change = false;
         _speed = tools::random_in_range(_min_speed, _max_speed);
 
-        _target_reset_threshold = 3;
         _heading_change_count = 0;
-        _history_reset = 5;
         _history_count = 0;
         _heading_failed_attempts = 0;
 
         _create_deg_to_cell_map();
-
         _position = _approximate_discrete_pos(_agent->headPos, _agent->tailPos);
     }
 
@@ -117,8 +123,9 @@ namespace Fishmodel {
         else {
             int current_pos = _approximate_discrete_pos(_agent->headPos, _agent->tailPos);
             int dist = std::abs(current_pos - _position);
-            if (dist > static_cast<int>(_num_cells / 2))
-                dist = 40 - std::max(current_pos, _position) + std::min(current_pos, _position);
+
+            if (dist > static_cast<int>(_num_cells) / 2)
+                dist = std::abs(static_cast<int>(_num_cells) - dist);
             if (dist > _target_reset_threshold) {
                 _position = _approximate_discrete_pos(_agent->headPos, _agent->tailPos);
                 _position = (_position + _target_reset_threshold * _heading)
@@ -131,12 +138,10 @@ namespace Fishmodel {
                 ++_heading_failed_attempts;
             else
                 _heading_failed_attempts = 0;
-            if (_heading_failed_attempts
-                > 3 * static_cast<int>(std::ceil(1 / _simulation.dt))) { // robot is stuck
-                _position = _approximate_discrete_pos(_agent->headPos, _agent->tailPos);
-                _position = (_position + _heading) % static_cast<int>(_num_cells);
-                if (_position < 0)
-                    _position += _num_cells;
+            if (_heading_failed_attempts > 3 * static_cast<int>(std::ceil(1 / _simulation.dt))) {
+                // robot is stuck attempt to move in the other direction for a while to get unstuck
+                _next_heading = reverse_heading(_heading);
+                std::cout << "robot is stuck" << std::endl;
             }
         }
         _update_history();
@@ -157,14 +162,15 @@ namespace Fishmodel {
             for (size_t i = 0; i < _position_history.size() - 1; ++i) {
                 int diff = _position_history[i + 1] - _position_history[i];
                 Heading est = to_heading(diff);
-                if ((diff <= -static_cast<int>(_num_cells) / 2)
-                    || (diff > static_cast<int>(_num_cells) / 2))
-                    est = reverse_heading(est);
+                if (std::abs(diff) > static_cast<int>(_num_cells) / 2)
+                    est = to_heading(reverse_heading(est) * sgn(_num_cells - std::abs(diff)));
                 else
                     avg_pos += _position_history[i];
                 sum_hdg += est;
             }
             _estimated_heading = to_heading(sum_hdg);
+            if (_estimated_heading == Heading::UNDEFINED)
+                _estimated_heading = _heading;
             _position_history.clear();
             _history_count = 0;
         }
@@ -264,18 +270,6 @@ namespace Fishmodel {
 
     void SocialFishModel::_my_group()
     {
-        //        int current_pos = _approximate_discrete_pos(_agent->headPos,
-        //        _agent->tailPos); std::vector<int> pos; boost::push_back(pos,
-        //        boost::irange(current_pos + 1,
-        //                                  current_pos + _heading * _cells_forward +
-        //                                  _heading, _heading));
-        //        boost::push_back(pos, boost::irange(current_pos + (-_heading *
-        //        _cells_backward),
-        //                                  current_pos + _heading, _heading));
-        //        std::for_each(
-        //            pos.begin(), pos.end(), [&](int& v) { (v < 0) ? v += _num_cells
-        //            : v %= _num_cells; });
-
         std::vector<int> pos;
         boost::push_back(pos,
             boost::irange(
@@ -309,13 +303,6 @@ namespace Fishmodel {
         // i.e. in its field of view. Fish that do not see a lot of neighbors in front
         // of them have higher probability to change direction, while ones that have
         // a lot of fish in front of them, are less prone to disobey the group.
-
-        //        int current_pos = _approximate_discrete_pos(_agent->headPos,
-        //        _agent->tailPos); std::vector<int> pos; boost::push_back(pos,
-        //        boost::irange(current_pos,
-        //                                  current_pos + _heading * _cells_forward +
-        //                                  _heading, _heading));
-
         std::vector<int> pos;
         boost::push_back(pos,
             boost::irange(_position, _position + _heading * _cells_forward + _heading, _heading));

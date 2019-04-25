@@ -14,9 +14,9 @@ namespace Fishmodel {
     void DensestPointModel::step()
     {
         auto ipos = invertedFishTable(_simulation.fishes);
-        auto max_element = std::max_element(ipos.begin(), ipos.end(),
-            [](const std::pair<int, std::vector<size_t>>& p1,
-                const std::pair<int, std::vector<size_t>>& p2) {
+        auto max_element = std::max_element(
+            ipos.begin(), ipos.end(), [](const std::pair<int, std::vector<size_t>>& p1,
+                                          const std::pair<int, std::vector<size_t>>& p2) {
                 return p1.second.size() < p2.second.size();
             });
         int tgt_position = max_element->first;
@@ -34,6 +34,7 @@ namespace Fishmodel {
             = RADIUS * sin(static_cast<double>(_deg2cell[tgt_position]) * M_PI / 180.0)
             + ARENA_CENTER.second;
 
+        std::cout << "Densest point was postion: " << tgt_position << std::endl;
         _agent->updateAgentPosition(_simulation.dt);
     }
 
