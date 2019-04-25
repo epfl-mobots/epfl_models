@@ -24,7 +24,7 @@ namespace Fishmodel {
                {0.262, 0.255}
 
               // clang-format on
-              )
+          )
     {
         init();
     }
@@ -168,7 +168,6 @@ namespace Fishmodel {
 
         double qx, qy;
         do {
-            qDebug() << "stuck";
             stepper(); // decide on the next kick length, duration, peak velocity
             free_will({distances, perception, thetas, phis}, {r_w, theta_w},
                 idcs); // throw in some free will
@@ -201,12 +200,17 @@ namespace Fishmodel {
     {
         size_t num_fish = _simulation.agents.size();
 
-        Eigen::VectorXd distances(num_fish);
-        Eigen::VectorXd perception(num_fish);
-        Eigen::VectorXd thetas(num_fish);
-        Eigen::VectorXd phis(num_fish);
+        Eigen::VectorXd distances = Eigen::VectorXd::Zero(num_fish);
+        Eigen::VectorXd perception = Eigen::VectorXd::Zero(num_fish);
+        Eigen::VectorXd thetas = Eigen::VectorXd::Zero(num_fish);
+        Eigen::VectorXd phis = Eigen::VectorXd::Zero(num_fish);
 
         for (uint i = 0; i < num_fish; ++i) {
+            auto model
+                = std::static_pointer_cast<ToulouseModel>(_simulation.agents[i].second);
+            if (model->id() == _id)
+                continue;
+
             auto fish = std::static_pointer_cast<ToulouseModel>(_simulation.agents[i].second);
             double posx = fish->position().x;
             double posy = fish->position().y;
@@ -231,7 +235,7 @@ namespace Fishmodel {
         std::vector<int> neigh_idcs;
         for (int i = 0; i < values.rows(); ++i) {
             auto model
-                = std::static_pointer_cast<ToulouseModel>(_simulation.agents[kicker_idx].second);
+                = std::static_pointer_cast<ToulouseModel>(_simulation.agents[i].second);
             if (model->id() == _id)
                 continue;
             neigh_idcs.push_back(i);
@@ -283,6 +287,7 @@ namespace Fishmodel {
 
         double dphi_attraction = 0;
         double dphi_ali = 0;
+
         for (int j = 0; j < perceived_agents; ++j) {
             int fidx = idcs[j];
             dphi_attraction += wall_distance_attractor(distances(fidx), radius)
