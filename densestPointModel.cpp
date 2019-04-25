@@ -9,7 +9,7 @@ namespace Fishmodel {
     {
     }
 
-    void DensestPointModel::reinit() {}
+    void DensestPointModel::reinit() { _history_count = 0; }
 
     void DensestPointModel::step()
     {
@@ -35,7 +35,6 @@ namespace Fishmodel {
             + ARENA_CENTER.second;
 
         std::cout << "Densest point was postion: " << tgt_position << std::endl;
-
         _agent->updateAgentPosition(_simulation.dt);
     }
 
