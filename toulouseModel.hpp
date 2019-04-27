@@ -21,7 +21,8 @@ namespace Fishmodel {
     using namespace simu;
     using namespace types;
 
-    enum Order { DECREASING, INCREASING };
+    enum Order { DECREASING,
+        INCREASING };
 
     class ToulouseModel;
     using state_t = std::tuple<Eigen::VectorXd, Eigen::VectorXd, Eigen::VectorXd, Eigen::VectorXd>;
@@ -115,9 +116,10 @@ namespace Fishmodel {
         double _current_time;
         double _time;
         int _id;
+        int _kicking_idx;
 
-        std::mutex _mtx;
-        std::vector<Coord_t> _trajectory;
+        mutable std::mutex _mtx;
+        mutable std::mutex _val_mtx;
 
         CoordinatesConversionPtr _coordinatesConversion;
         const Coord_t ARENA_CENTER;
