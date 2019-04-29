@@ -116,9 +116,9 @@ namespace Fishmodel {
         double _current_time;
         double _time;
         int _id;
-        int _kicking_idx;
+        //        int _kicking_idx;
 
-        mutable std::mutex _mtx;
+        //        mutable std::mutex _mtx;
         mutable std::mutex _val_mtx;
 
         CoordinatesConversionPtr _coordinatesConversion;

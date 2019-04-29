@@ -57,44 +57,8 @@ namespace Fishmodel {
             return;
         }
 
-        qDebug() << "robot " << _position.x << " " << _position.y << " " << _angular_direction
+        qDebug() << "robot " << _id << " " << _position.x << " " << _position.y << " " << _angular_direction
                  << " " << angle_to_pipi(_agent->direction);
-
-        //        {
-        //            std::lock_guard<std::mutex> lock(_mtx);
-        //            if (_kick_flag) {
-        //                _kick_flag = false;
-
-        //                auto model = reinterpret_cast<ToulouseModel*>(_simulation.robots[0].second);
-        //                _kicking_idx = model->id();
-        //                double tkicker = model->time_kicker();
-        //                for (uint i = 1; i < _simulation.robots.size(); ++i) {
-        //                    auto model = reinterpret_cast<ToulouseModel*>(_simulation.robots[i].second);
-        //                    if (model->time_kicker() < tkicker) {
-        //                        auto prev_kicker = reinterpret_cast<ToulouseModel*>(_simulation.robots[_kicking_idx].second);
-        //                        model->is_kicking() = true;
-        //                        prev_kicker->is_kicking() = false;
-        //                        _kicking_idx = i;
-        //                        tkicker = model->time_kicker();
-        //                    }
-        //                }
-        //            }
-        //            else {
-        //                for (uint i = 0; i < _simulation.robots.size(); ++i) {
-        //                    auto model = reinterpret_cast<ToulouseModel*>(_simulation.robots[i].second);
-        //                    if (model->is_kicking())
-        //                        _kicking_idx = i;
-
-        //                    if (model->time_kicker() < tkicker) {
-        //                        auto prev_kicker = reinterpret_cast<ToulouseModel*>(_simulation.robots[_kicking_idx].second);
-        //                        model->is_kicking() = true;
-        //                        prev_kicker->is_kicking() = false;
-        //                        _kicking_idx = i;
-        //                        tkicker = model->time_kicker();
-        //                    }
-        //                }
-        //            }
-        //        }
 
         _is_kicking = true;
 
@@ -108,20 +72,13 @@ namespace Fishmodel {
         // update position and velocity information -- actual move step
         move();
 
-        {
-            std::lock_guard<std::mutex> lock(_mtx);
-            _is_kicking = true;
-            _kicking_idx = -1;
-        }
+        _is_kicking = true;
     }
 
     void ToulouseModel::stimulate()
     {
 
-        {
-            std::lock_guard<std::mutex> lock(_val_mtx);
-            _time += _kick_duration;
-        }
+        _time += _kick_duration;
         _desired_position.x = _position.x + _kick_length * std::cos(_angular_direction);
         _desired_position.y = _position.y + _kick_length * std::sin(_angular_direction);
 
