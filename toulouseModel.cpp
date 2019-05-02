@@ -21,7 +21,7 @@ namespace Fishmodel {
           // clang-format off
           ARENA_CENTER(
 //              {0.3093, 0.2965}
-               {0.262, 0.255}
+               {0.262, 0.258}
 
               // clang-format on
               )
@@ -42,9 +42,12 @@ namespace Fishmodel {
         }
 
         stepper();
-        _position.x = -(_id - 1. - _simulation.agents.size() / 2) * body_length;
+        //        _position.x = -(_id - 1. - _simulation.agents.size() / 2) * body_length;
         angular_direction() = _id * 2. * M_PI / (_simulation.agents.size() + 1);
-        _position.y = -0.1;
+        //        _position.y = -0.1;
+        _position.x = _agent->headPos.first - ARENA_CENTER.first;
+        _position.y = _agent->headPos.second - ARENA_CENTER.second;
+        _desired_position = _position;
     }
 
     void ToulouseModel::step()
