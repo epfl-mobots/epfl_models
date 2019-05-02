@@ -21,7 +21,7 @@ namespace Fishmodel {
           // clang-format off
           ARENA_CENTER(
 //              {0.3093, 0.2965}
-               {0.262, 0.255}
+               {0.262, 0.258}
 
               // clang-format on
           )
@@ -60,30 +60,48 @@ namespace Fishmodel {
         qDebug() << "robot " << _id << " " << _position.x << " " << _position.y << " " << _angular_direction
                  << " " << angle_to_pipi(_agent->direction);
 
-        _is_kicking = true;
-
         // the individuals decide on the desired position
         stimulate(); // kicking individual goes first
 
         // apply attractors/repulsors and update the fish intuitions
         // (for the kicker, the rest are in their gliding phase)
-        interact();
+        if (_is_kicking)
+            interact();
 
         // update position and velocity information -- actual move step
         move();
 
         _is_kicking = true;
+
+        _current_time += _simulation.dt;
     }
 
     void ToulouseModel::stimulate()
+
     {
+        if (_current_time > _kick_duration) {
+            _is_kicking = true;
+            _current_time = 0;
 
-        _time += _kick_duration;
-        _desired_position.x = _position.x + _kick_length * std::cos(_angular_direction);
-        _desired_position.y = _position.y + _kick_length * std::sin(_angular_direction);
+            _time += _kick_duration;
+            _desired_position.x = _position.x + _kick_length * std::cos(_angular_direction);
+            _desired_position.y = _position.y + _kick_length * std::sin(_angular_direction);
 
-        _desired_speed.vx = (_desired_position.x - _position.x) / _kick_duration;
-        _desired_speed.vy = (_desired_position.y - _position.y) / _kick_duration;
+            _desired_speed.vx = (_desired_position.x - _position.x) / _kick_duration;
+            _desired_speed.vy = (_desired_position.y - _position.y) / _kick_duration;
+        }
+        else {
+            _is_kicking = false;
+
+            //            double time_diff = time_kicker() + _current_time - _time;
+            //            double beta = (1. - std::exp(-time_diff / tau0))
+            //                / (1. - std::exp(-_kick_duration / tau0));
+            //            _desired_position.x = _position.x + _kick_length * beta * std::cos(_angular_direction);
+            //            _desired_position.y = _position.y + _kick_length * beta * std::sin(_angular_direction);
+
+            //            _desired_speed.vx = (_desired_position.x - _position.x) / _kick_duration;
+            //            _desired_speed.vy = (_desired_position.y - _position.y) / _kick_duration;
+        }
     }
 
     void ToulouseModel::interact()
