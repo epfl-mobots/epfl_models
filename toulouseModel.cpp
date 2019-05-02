@@ -24,7 +24,7 @@ namespace Fishmodel {
                {0.262, 0.258}
 
               // clang-format on
-              )
+          )
     {
         init();
     }
@@ -52,48 +52,15 @@ namespace Fishmodel {
 
     void ToulouseModel::step()
     {
-#if 0
-        qDebug() << _agent->headPos.first << " " << _agent->headPos.second;
-
-        _position.x = _agent->headPos.first;
-        _position.y = _agent->headPos.second;
-
-        _agent->headPos.first = ARENA_CENTER.first + 0.25 * std::cos(_time * M_PI / 180);
-        _agent->headPos.second = ARENA_CENTER.second + 0.25 * std::sin(_time * M_PI / 180);
-        //        _agent->headPos.first = ARENA_CENTER.first;
-        //        _agent->headPos.second = ARENA_CENTER.second;
-        _agent->direction = 0;
-
-        _time += 5;
-        if (_time > 360)
-            _time = 0;
-        _agent->updateAgentPosition(_simulation.dt);
-
-#else
-        static int count = 0;
-
-        //        if (count++ == 0) {
-        //            _speed.vx = (_agent->headPos.first - _position.x) / _simulation.dt;
-        //            _speed.vy = (_agent->headPos.second - _position.y) / _simulation.dt;
-
-        //            _position.x = _agent->headPos.first - ARENA_CENTER.first;
-        //            _position.y = _agent->headPos.second - ARENA_CENTER.second;
-        //        }
-        //        else {
-        //        _position.x -= ARENA_CENTER.first;
-        //        _position.y -= ARENA_CENTER.second;
-        //            qDebug() << "disregarding current position";
-        //        }
-
-        //        _angular_direction = angle_to_pipi(_agent->direction);
-
         std::pair<Agent*, Behavior*> current_agent(_agent, this);
-        auto result
-            = std::find(_simulation.robots.begin(), _simulation.robots.end(), current_agent);
-        if (result == _simulation.robots.end())
+        auto result = std::find(_simulation.robots.begin(), _simulation.robots.end(), current_agent);
+        if (result == _simulation.robots.end()) {
+            _position.x = _agent->headPos.first - ARENA_CENTER.first;
+            _position.y = _agent->headPos.second - ARENA_CENTER.second;
             return;
+        }
 
-        qDebug() << "robot " << _position.x << " " << _position.y << " " << _angular_direction
+        qDebug() << "robot " << _id << " " << _position.x << " " << _position.y << " " << _angular_direction
                  << " " << angle_to_pipi(_agent->direction);
 
         _is_kicking = true;
@@ -108,13 +75,12 @@ namespace Fishmodel {
         // update position and velocity information -- actual move step
         move();
 
-        _is_kicking = false;
-#endif
+        _is_kicking = true;
     }
 
     void ToulouseModel::stimulate()
     {
-        // TODO: kick length is not initialized the first time !!
+
         _time += _kick_duration;
         _desired_position.x = _position.x + _kick_length * std::cos(_angular_direction);
         _desired_position.y = _position.y + _kick_length * std::sin(_angular_direction);
@@ -171,7 +137,6 @@ namespace Fishmodel {
 
         double qx, qy;
         do {
-            qDebug() << "stuck";
             stepper(); // decide on the next kick length, duration, peak velocity
             free_will({distances, perception, thetas, phis}, {r_w, theta_w},
                 idcs); // throw in some free will
@@ -187,13 +152,15 @@ namespace Fishmodel {
 
     void ToulouseModel::move()
     {
+        std::lock_guard<std::mutex> lock(_val_mtx);
+
         // kicker advancing to the new position
         _position = _desired_position;
         _speed = _desired_speed;
 
-        //        _position.x += ARENA_CENTER.first;
-        //        _position.y += ARENA_CENTER.second;
-
+        // up to this point everything is calculated on a circle of
+        // radius r and origin (0, 0), but the control command
+        // is given with respect to the setup center
         _agent->headPos.first = _position.x + ARENA_CENTER.first;
         _agent->headPos.second = _position.y + ARENA_CENTER.second;
         //        _agent->updateAgentPosition(_simulation.dt);
@@ -204,12 +171,17 @@ namespace Fishmodel {
     {
         size_t num_fish = _simulation.agents.size();
 
-        Eigen::VectorXd distances(num_fish);
-        Eigen::VectorXd perception(num_fish);
-        Eigen::VectorXd thetas(num_fish);
-        Eigen::VectorXd phis(num_fish);
+        Eigen::VectorXd distances = Eigen::VectorXd::Zero(num_fish);
+        Eigen::VectorXd perception = Eigen::VectorXd::Zero(num_fish);
+        Eigen::VectorXd thetas = Eigen::VectorXd::Zero(num_fish);
+        Eigen::VectorXd phis = Eigen::VectorXd::Zero(num_fish);
 
         for (uint i = 0; i < num_fish; ++i) {
+            auto model
+                = std::static_pointer_cast<ToulouseModel>(_simulation.agents[i].second);
+            if (model->id() == _id)
+                continue;
+
             auto fish = std::static_pointer_cast<ToulouseModel>(_simulation.agents[i].second);
             double posx = fish->position().x;
             double posy = fish->position().y;
@@ -234,7 +206,7 @@ namespace Fishmodel {
         std::vector<int> neigh_idcs;
         for (int i = 0; i < values.rows(); ++i) {
             auto model
-                = std::static_pointer_cast<ToulouseModel>(_simulation.agents[kicker_idx].second);
+                = std::static_pointer_cast<ToulouseModel>(_simulation.agents[i].second);
             if (model->id() == _id)
                 continue;
             neigh_idcs.push_back(i);
@@ -250,6 +222,8 @@ namespace Fishmodel {
 
     void ToulouseModel::stepper()
     {
+        std::lock_guard<std::mutex> lock(_val_mtx);
+
         double bb;
 
         bb = std::sqrt(-2. * std::log(simu::tools::random_in_range(.0, 1.) + 1.0e-16));
@@ -286,6 +260,7 @@ namespace Fishmodel {
 
         double dphi_attraction = 0;
         double dphi_ali = 0;
+
         for (int j = 0; j < perceived_agents; ++j) {
             int fidx = idcs[j];
             dphi_attraction += wall_distance_attractor(distances(fidx), radius)
@@ -368,28 +343,95 @@ namespace Fishmodel {
         return difference;
     }
 
-    Position<double> ToulouseModel::position() const { return _position; }
-    Position<double>& ToulouseModel::position() { return _position; }
+    Position<double> ToulouseModel::position() const
+    {
+        std::lock_guard<std::mutex> lock(_val_mtx);
+        return _position;
+    }
 
-    double ToulouseModel::time_kicker() const { return _time + _kick_duration; }
+    Position<double>& ToulouseModel::position()
+    {
+        std::lock_guard<std::mutex> lock(_val_mtx);
+        return _position;
+    }
 
-    double ToulouseModel::time() const { return _time; }
-    double& ToulouseModel::time() { return _time; }
+    double ToulouseModel::time_kicker() const
+    {
+        std::lock_guard<std::mutex> lock(_val_mtx);
+        return _time + _kick_duration;
+    }
 
-    double ToulouseModel::angular_direction() const { return _angular_direction; }
-    double& ToulouseModel::angular_direction() { return _angular_direction; }
+    double ToulouseModel::time() const
+    {
+        std::lock_guard<std::mutex> lock(_val_mtx);
+        return _time;
+    }
 
-    double ToulouseModel::peak_velocity() const { return _peak_velocity; }
-    double& ToulouseModel::peak_velocity() { return _peak_velocity; }
+    double& ToulouseModel::time()
+    {
+        std::lock_guard<std::mutex> lock(_val_mtx);
+        return _time;
+    }
 
-    double ToulouseModel::kick_length() const { return _kick_length; }
-    double& ToulouseModel::kick_length() { return _kick_length; }
+    double ToulouseModel::angular_direction() const
+    {
+        std::lock_guard<std::mutex> lock(_val_mtx);
+        return _angular_direction;
+    }
 
-    double& ToulouseModel::kick_duration() { return _kick_duration; }
-    double ToulouseModel::kick_duration() const { return _kick_duration; }
+    double& ToulouseModel::angular_direction()
+    {
+        std::lock_guard<std::mutex> lock(_val_mtx);
+        return _angular_direction;
+    }
 
-    bool& ToulouseModel::is_kicking() { return _is_kicking; }
-    bool ToulouseModel::is_kicking() const { return _is_kicking; }
+    double ToulouseModel::peak_velocity() const
+    {
+        std::lock_guard<std::mutex> lock(_val_mtx);
+        return _peak_velocity;
+    }
+
+    double& ToulouseModel::peak_velocity()
+    {
+        std::lock_guard<std::mutex> lock(_val_mtx);
+        return _peak_velocity;
+    }
+
+    double ToulouseModel::kick_length() const
+    {
+        std::lock_guard<std::mutex> lock(_val_mtx);
+        return _kick_length;
+    }
+
+    double& ToulouseModel::kick_length()
+    {
+        std::lock_guard<std::mutex> lock(_val_mtx);
+        return _kick_length;
+    }
+
+    double& ToulouseModel::kick_duration()
+    {
+        std::lock_guard<std::mutex> lock(_val_mtx);
+        return _kick_duration;
+    }
+
+    double ToulouseModel::kick_duration() const
+    {
+        std::lock_guard<std::mutex> lock(_val_mtx);
+        return _kick_duration;
+    }
+
+    bool& ToulouseModel::is_kicking()
+    {
+        std::lock_guard<std::mutex> lock(_val_mtx);
+        return _is_kicking;
+    }
+
+    bool ToulouseModel::is_kicking() const
+    {
+        std::lock_guard<std::mutex> lock(_val_mtx);
+        return _is_kicking;
+    }
 
     int ToulouseModel::id() const { return _id; }
     int& ToulouseModel::id() { return _id; }
