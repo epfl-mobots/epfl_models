@@ -11,6 +11,19 @@
 #include "types/types.hpp"
 #include "utils/random/random_generator.hpp"
 
+#include <elastic-band/TebConfig.hpp>
+#include <elastic-band/TebPlanner.hpp>
+#include <elastic-band/TebPlot.hpp>
+#include <elastic-band/TebVisualization.hpp>
+#include <elastic-band/RobotFootprintModel.hpp>
+#include <elastic-band/Obstacles.hpp>
+#include <elastic-band/Distances.hpp>
+#include <elastic-band/kinematics/PoseSE2.hpp>
+#include <elastic-band/kinematics/Velocity.hpp>
+#include <elastic-band/kinematics/Acceleration.hpp>
+#include <elastic-band/kinematics/Timestamp.hpp>
+#include <elastic-band/kinematics/Trajectory.hpp>
+
 #include <eigen3/Eigen/Core>
 
 #include <map>
@@ -21,8 +34,7 @@ namespace Fishmodel {
     using namespace simu;
     using namespace types;
 
-    enum Order { DECREASING,
-        INCREASING };
+    enum Order { DECREASING, INCREASING };
 
     class ToulouseModel;
     using state_t = std::tuple<Eigen::VectorXd, Eigen::VectorXd, Eigen::VectorXd, Eigen::VectorXd>;
@@ -116,10 +128,30 @@ namespace Fishmodel {
         double _current_time;
         double _time;
         int _id;
-        //        int _kicking_idx;
 
-        //        mutable std::mutex _mtx;
-        mutable std::mutex _val_mtx;
+        // Timed Elastic Band
+        elastic_band::TebConfig              _config;
+        elastic_band::TebPlannerPtr          _planner;
+        elastic_band::TebVisualizationPtr    _visualization;
+        elastic_band::RobotFootprintModelPtr _robot_model;
+        elastic_band::Point2dContainer       _robot_shape;
+        elastic_band::ViaPointContainer      _viapoints;
+        elastic_band::ObstacleContainer      _obstacles;
+        elastic_band::TrajectoryPtr          _trajectory_ref;
+        elastic_band::TrajectoryPtr          _trajectory_opt;
+        QMainWindow* _plot_path_ref = new QMainWindow();
+        QMainWindow* _plot_path_opt = new QMainWindow();
+        QMainWindow* _plot_pose_ref = new QMainWindow();
+        QMainWindow* _plot_pose_opt = new QMainWindow();
+        QMainWindow* _plot_spd_ref  = new QMainWindow();
+        QMainWindow* _plot_spd_opt  = new QMainWindow();
+        QMainWindow* _plot_vel_ref  = new QMainWindow();
+        QMainWindow* _plot_vel_opt  = new QMainWindow();
+        QMainWindow* _plot_acc_ref  = new QMainWindow();
+        QMainWindow* _plot_acc_opt  = new QMainWindow();
+
+        // std::mutex _mtx;
+        // std::vector<Coord_t> _trajectory;
 
         CoordinatesConversionPtr _coordinatesConversion;
         const Coord_t ARENA_CENTER;
