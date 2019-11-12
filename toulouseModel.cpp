@@ -437,7 +437,9 @@ namespace Fishmodel {
     QList<double> ToulouseModel::getSpeedCommands() const
     {
         QList<double> speeds;
-        elastic_band::VelocityContainer velocity_profile = _trajectory_opt->getProfileVelocity();
+        elastic_band::VelocityContainer velocity_profile;
+        _trajectory_opt->getProfileVelocity(velocity_profile);
+        speeds.reserve(static_cast<int>(2 * velocity_profile.size()));
         for (size_t i = 0; i < velocity_profile.size(); i++) {
             // convert speeds from [rad/s] to [cm/s]
             velocity_profile.at(i)->wheel() *= velocity_profile.at(i)->getRadius() * 100.;
