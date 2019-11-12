@@ -240,7 +240,8 @@ namespace Fishmodel {
             tau0 = 0.8; // [s]
 
             // compute reference trajectory
-            double timestep = 1. / static_cast<double>(RobotControlSettings::get().controlFrequencyHz()); // [s]
+            //double timestep = 1. / static_cast<double>(RobotControlSettings::get().controlFrequencyHz()); // [s]
+            double timestep = 0.005; // [s]
             unsigned int nb_commands = static_cast<unsigned int>(std::floor(_kick_duration / timestep)); // [#]
             std::chrono::milliseconds timestep_ms(static_cast<long int>(std::ceil(timestep * 1000.))); // [ms]
             elastic_band::TimestepPtr timestep_ptr(new elastic_band::Timestep(timestep_ms));
@@ -431,6 +432,19 @@ namespace Fishmodel {
 
         _is_kicking = false;
 #endif
+    }
+
+    QList<double> ToulouseModel::getSpeedCommands() const
+    {
+        QList<double> speeds;
+        elastic_band::VelocityContainer velocity_profile = _trajectory_opt->getProfileVelocity();
+        for (size_t i = 0; i < velocity_profile.size(); i++) {
+            // convert speeds from [rad/s] to [cm/s]
+            velocity_profile.at(i)->wheel() *= velocity_profile.at(i)->getRadius() * 100.;
+            speeds.append(velocity_profile.at(i)->wheel()[0]);
+            speeds.append(velocity_profile.at(i)->wheel()[1]);
+        }
+        return speeds;
     }
 
     void ToulouseModel::stimulate()

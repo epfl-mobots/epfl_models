@@ -49,6 +49,8 @@ namespace Fishmodel {
         virtual void reinit() override;
         virtual void step() override;
 
+        QList<double> getSpeedCommands() const;
+
         void stimulate();
         void interact();
         virtual void move();
