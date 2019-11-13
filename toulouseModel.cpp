@@ -172,6 +172,7 @@ namespace Fishmodel {
 
     void ToulouseModel::step()
     {
+        qInfo() << "<<<<<<< TOULOUSE MODEL: step";
 #if 0
         qDebug() << _agent->headPos.first << " " << _agent->headPos.second;
 
@@ -292,8 +293,6 @@ namespace Fishmodel {
             double Ki = 1.00;
             double Kd = 0.05;
             _angular_direction = angle_to_pipi(_angular_direction);
-            qDebug() << "Peak velocity =" << _peak_velocity << "[m/s]";
-            qDebug() << "Kick duration =" << _kick_duration << "[s]";
             pose_profile.front() = elastic_band::PoseSE2Ptr(new elastic_band::PoseSE2(x, y, theta));
             for (size_t i = 1; i < pose_profile.size(); i++) {
                 duration = i * timestep;
@@ -357,15 +356,15 @@ namespace Fishmodel {
                 pose_profile.at(i) = elastic_band::PoseSE2Ptr(new elastic_band::PoseSE2(x, y, theta));
             }
 
-            _trajectory_ref->robotParameters().wheel_radius = 1;
-            _trajectory_ref->robotParameters().wheel_distance = 1;
+            _trajectory_ref->robotParameters().wheel_radius = 0.010; // [m]
+            _trajectory_ref->robotParameters().wheel_distance = 0.018; // [m]
             _trajectory_ref->setProfileTimestep(timestep_profile, false);
             _trajectory_ref->setProfilePose(pose_profile);
             // elastic_band::PoseSE2Container pose_profile = _trajectory_ref->getProfilePose();
             // for (elastic_band::PoseSE2Container::const_iterator pose = pose_profile.begin(); pose != pose_profile.end(); pose++) {
             //     std::cout << **pose << std::endl;
             // }
-            std::cout << *_trajectory_ref << std::endl;
+            // std::cout << *_trajectory_ref << std::endl;
 
             // visualize reference trajectory
             _plot_path_ref = elastic_band::TebPlot::plotPath               (&(*_trajectory_ref), _plot_path_ref, "Reference path");
@@ -400,7 +399,7 @@ namespace Fishmodel {
                     _trajectory_opt->robotParameters().wheel_radius   = _trajectory_ref->robotParameters().wheel_radius;
                     _trajectory_opt->robotParameters().wheel_distance = _trajectory_ref->robotParameters().wheel_distance;
                     _planner->getFullTrajectory(*_trajectory_opt);
-                    // std::cout << *_trajectory_opt << std::endl;
+                     std::cout << *_trajectory_opt << std::endl;
 
                     // compute optimization performance
                     _planner->computeCurrentCost();
