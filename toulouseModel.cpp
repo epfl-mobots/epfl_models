@@ -77,7 +77,7 @@ namespace Fishmodel {
         _config.goal_tolerance.yaw_goal_tolerance = 0.2;
         _config.goal_tolerance.free_goal_vel = false;
         _config.goal_tolerance.complete_global_plan = true;
-        _config.obstacles.min_obstacle_dist = 0.5;
+        _config.obstacles.min_obstacle_dist = 0.005;
         _config.obstacles.inflation_dist = 0.6;
         _config.obstacles.dynamic_obstacle_inflation_dist = 0.6;
         _config.obstacles.include_dynamic_obstacles = true;
@@ -148,11 +148,12 @@ namespace Fishmodel {
         _config.recovery.oscillation_filter_duration = 10;
         _viapoints.clear();
         _obstacles.clear();
+        _obstacles.push_back(elastic_band::ObstaclePtr(new elastic_band::CircularObstacle(ARENA_CENTER.first, ARENA_CENTER.second, radius)));
         _robot_shape.clear();
-        _robot_shape.push_back(Eigen::Vector2d(0,0));
-        _robot_shape.push_back(Eigen::Vector2d(0,1));
-        _robot_shape.push_back(Eigen::Vector2d(1,1));
-        _robot_shape.push_back(Eigen::Vector2d(1,0));
+        _robot_shape.push_back(Eigen::Vector2d(-0.22, -0.11));
+        _robot_shape.push_back(Eigen::Vector2d(+0.22, -0.11));
+        _robot_shape.push_back(Eigen::Vector2d(+0.22, +0.11));
+        _robot_shape.push_back(Eigen::Vector2d(-0.22, +0.11));
         _robot_model    = elastic_band::RobotFootprintModelPtr(new elastic_band::PolygonRobotFootprint(_robot_shape));
         // _visualization  = elastic_band::TebVisualizationPtr   (new elastic_band::TebVisualization(node_handle, _config));
         _planner        = elastic_band::TebPlannerPtr(new elastic_band::TebPlanner());
@@ -356,7 +357,7 @@ namespace Fishmodel {
                 pose_profile.at(i) = elastic_band::PoseSE2Ptr(new elastic_band::PoseSE2(x, y, theta));
             }
 
-            _trajectory_ref->robotParameters().wheel_radius = 0.010; // [m]
+            _trajectory_ref->robotParameters().wheel_radius = 0.005; // [m]
             _trajectory_ref->robotParameters().wheel_distance = 0.018; // [m]
             _trajectory_ref->setProfileTimestep(timestep_profile, false);
             _trajectory_ref->setProfilePose(pose_profile);
