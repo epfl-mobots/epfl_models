@@ -150,10 +150,10 @@ namespace Fishmodel {
         _obstacles.clear();
         _obstacles.push_back(elastic_band::ObstaclePtr(new elastic_band::CircularObstacle(ARENA_CENTER.first, ARENA_CENTER.second, radius)));
         _robot_shape.clear();
-        _robot_shape.push_back(Eigen::Vector2d(-0.22, -0.11));
-        _robot_shape.push_back(Eigen::Vector2d(+0.22, -0.11));
-        _robot_shape.push_back(Eigen::Vector2d(+0.22, +0.11));
-        _robot_shape.push_back(Eigen::Vector2d(-0.22, +0.11));
+        _robot_shape.push_back(Eigen::Vector2d(-0.044/2, -0.022/2));
+        _robot_shape.push_back(Eigen::Vector2d(+0.044/2, -0.022/2));
+        _robot_shape.push_back(Eigen::Vector2d(+0.044/2, +0.022/2));
+        _robot_shape.push_back(Eigen::Vector2d(-0.044/2, +0.022/2));
         _robot_model    = elastic_band::RobotFootprintModelPtr(new elastic_band::PolygonRobotFootprint(_robot_shape));
         // _visualization  = elastic_band::TebVisualizationPtr   (new elastic_band::TebVisualization(node_handle, _config));
         _planner        = elastic_band::TebPlannerPtr(new elastic_band::TebPlanner());
