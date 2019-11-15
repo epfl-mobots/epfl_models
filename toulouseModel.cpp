@@ -92,6 +92,7 @@ namespace Fishmodel {
         _config.obstacles.costmap_converter_rate = 5;
         _config.optim.no_inner_iterations = 5;
         _config.optim.no_outer_iterations = 4;
+        _config.optim.stop_below_percentage_improvement = 1;
         _config.optim.optimization_activate = true;
         _config.optim.optimization_verbose = true;
         _config.optim.penalty_epsilon = 0.001;
