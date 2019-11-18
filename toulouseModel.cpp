@@ -174,7 +174,6 @@ namespace Fishmodel {
 
     void ToulouseModel::step()
     {
-        qInfo() << "<<<<<<< TOULOUSE MODEL: step";
 #if 0
         qDebug() << _agent->headPos.first << " " << _agent->headPos.second;
 
