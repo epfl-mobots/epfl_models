@@ -210,13 +210,15 @@ namespace Fishmodel {
         //        _angular_direction = angle_to_pipi(_agent->direction);
 
         std::pair<Agent*, Behavior*> current_agent(_agent, this);
-        auto result
-            = std::find(_simulation.robots.begin(), _simulation.robots.end(), current_agent);
+        auto result = std::find(_simulation.robots.begin(), _simulation.robots.end(), current_agent);
         if (result == _simulation.robots.end())
             return;
 
-        qDebug() << "robot " << _position.x << " " << _position.y << " " << _angular_direction
-                 << " " << angle_to_pipi(_agent->direction);
+        // update the robot position as tracked by the camera and center it
+        _position.x = _agent->headPos.first  - ARENA_CENTER.first;
+        _position.y = _agent->headPos.second - ARENA_CENTER.second;
+
+        qDebug() << "robot" << _position.x << _position.y << angle_to_pipi(_agent->direction);
 
         _time += _simulation.dt;
         qDebug() << "current model time =" << _time << "s";
@@ -234,197 +236,252 @@ namespace Fishmodel {
             // apply attractors/repulsors and update the fish intuitions
             // (for the kicker, the rest are in their gliding phase)
             interact();
+        }
 
-            // TEST PURPOSES
-            _angular_direction = 0.2; // [rad]
-            _peak_velocity = 0.15; // [m/s]
-            _kick_duration = 1.008; // [s]
-            tau0 = 0.8; // [s]
+        // TEST PURPOSES
+        _angular_direction = 0.2; // [rad]
+        _peak_velocity = 0.15; // [m/s]
+        _kick_duration = 1.008; // [s]
+        tau0 = 0.8; // [s]
 
-            // compute reference trajectory
-            //double timestep = 1. / static_cast<double>(RobotControlSettings::get().controlFrequencyHz()); // [s]
-            double timestep = 0.005; // [s]
-            unsigned int nb_commands = static_cast<unsigned int>(std::floor(_kick_duration / timestep)); // [#]
-            std::chrono::milliseconds timestep_ms(static_cast<long int>(std::ceil(timestep * 1000.))); // [ms]
-            elastic_band::TimestepPtr timestep_ptr(new elastic_band::Timestep(timestep_ms));
-            elastic_band::TimestepContainer timestep_profile(nb_commands - 1, timestep_ptr);
-            elastic_band::VelocityContainer velocity_profile(nb_commands);
-            elastic_band:: PoseSE2Container     pose_profile(nb_commands);
+        // determine the current pose and velocity
+        elastic_band::PoseSE2 pose;
+        elastic_band::Velocity velocity;
+        elastic_band::Timestamp timestamp;
+        int idx = -1;
+        if (_trajectory_opt->trajectory().size() > 0) {
+            // find the trajectory index corresponding to the current position
+            int timestep = _time / _simulation.dt;
+            int window = 30;
+            int limit_ahead  = std::min(timestep + window / 2, static_cast<int>(_trajectory_opt->trajectory().size()) - 1);
+            int limit_behind = std::max(timestep - window / 2, 0);
+            double accuracy = 0;//0.001;
+            double distance = std::numeric_limits<double>::max();
+            Eigen::Vector2d position = Eigen::Vector2d(_position.x, _position.y);
+            for (int i = limit_ahead; i >= limit_behind; i--) {
+                double dist = (_trajectory_opt->trajectory().at(i)->pose().position() - position).norm();
+                qDebug() << "<<<<<<<<<<<<<<<<<<<<<<< i =" << i << "dist =" << dist;
+                if (dist < distance) {
+                    distance = dist;
+                    idx = i;
+                }
+                if (distance < accuracy) {
+                    break;
+                }
+            }
+            qDebug() << "<<<<<<<<<<<<<<<<<<<<<<< index current position =" << idx;
+        }
+        if (idx >= 0) {
+            qDebug() << "<<<<<<<<<<<<<<<<<<<<<<< idx >= 0";
+            pose      = _trajectory_opt->trajectory().at(idx)->pose();
+            velocity  = _trajectory_opt->trajectory().at(idx)->velocity();
+            timestamp = _trajectory_opt->trajectory().at(idx)->timestamp();
+        } else {
+            qDebug() << "<<<<<<<<<<<<<<<<<<<<<<< idx < 0";
+            pose      = elastic_band::PoseSE2(_position.x, _position.y, angle_to_pipi(_agent->direction));
+            velocity  = elastic_band::Velocity(0, 0, angle_to_pipi(_agent->direction));
+            timestamp = elastic_band::Timestamp(elastic_band::timestamp_t(0));
+        }
+        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< pose = " << pose << std::endl;
+        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< velocity = " << velocity << std::endl;
+        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< timestamp = " << timestamp << std::endl;
+
+        // compute reference trajectory
+        // double timestep = 1. / static_cast<double>(RobotControlSettings::get().controlFrequencyHz()); // [s]
+        double timestep = 0.005; // [s]
+        double horizon = std::min(_kick_duration - timestamp.count(), 15 * timestep); // [s]
+        // unsigned int nb_commands = static_cast<unsigned int>(std::floor(_kick_duration / timestep)); // [#]
+        // std::chrono::milliseconds timestep_ms(static_cast<long int>(std::ceil(timestep * 1000.))); // [ms]
+        // elastic_band::TimestepPtr timestep_ptr(new elastic_band::Timestep(timestep_ms));
+        size_t nb_commands = static_cast<size_t>(std::max(std::floor(horizon / timestep), 1.)); // [#]
+        elastic_band::TimestepPtr timestep_ptr(new elastic_band::Timestep(elastic_band::timestep_t(timestep)));
+        elastic_band::TimestepContainer timestep_profile(nb_commands - 1, timestep_ptr);
+        // elastic_band::VelocityContainer velocity_profile(nb_commands);
+        elastic_band:: PoseSE2Container     pose_profile(nb_commands);
+        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< timestep = " << timestep << std::endl;
+        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< horizon = " << horizon << std::endl;
+        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< nb_commands = " << nb_commands << std::endl;
 /*
-            double x, y, theta;
-            // double dtheta = 2 * M_PI / 100 / M_PI * 2; // 40 [mrad]
-            // double dtheta = 2 * M_PI / 100 / M_PI * 2 / 10 / 8; // 0.5 [mrad]
-            // double dtheta = 2 * M_PI / 100 / M_PI * 2 / 10 / 4; // 1 [mrad]
-            double dtheta = 2 * M_PI / 100 / M_PI * 2 / 10 / 4 / 1.1; // 0.9 [mrad]
-            double radius = 10. / 100.; // 10 [cm]
-            for (size_t i = 0; i < pose_profile.size(); i++) {
-                theta = i * dtheta + M_PI / 2;
-                x = radius * std::cos(theta - M_PI / 2);
-                y = radius * std::sin(theta - M_PI / 2);
-                pose_profile.at(i) = elastic_band::PoseSE2Ptr(new elastic_band::PoseSE2(x, y, theta));
-            }
+        double x, y, theta;
+        // double dtheta = 2 * M_PI / 100 / M_PI * 2; // 40 [mrad]
+        // double dtheta = 2 * M_PI / 100 / M_PI * 2 / 10 / 8; // 0.5 [mrad]
+        // double dtheta = 2 * M_PI / 100 / M_PI * 2 / 10 / 4; // 1 [mrad]
+        double dtheta = 2 * M_PI / 100 / M_PI * 2 / 10 / 4 / 1.1; // 0.9 [mrad]
+        double radius = 10. / 100.; // 10 [cm]
+        for (size_t i = 0; i < pose_profile.size(); i++) {
+            theta = i * dtheta + M_PI / 2;
+            x = radius * std::cos(theta - M_PI / 2);
+            y = radius * std::sin(theta - M_PI / 2);
+            pose_profile.at(i) = elastic_band::PoseSE2Ptr(new elastic_band::PoseSE2(x, y, theta));
+        }
 */
-            double acceleration = _config.robot.acc_lim_x; // [m/s^2]
-            double translation_init = 0.01; // [m/s]
-            double rotation_init = 0; // [rad/s]
-            double angle_init = 0; // [rad]
-            Eigen::Vector2d position_init = 0 * Eigen::Vector2d(std::cos(angle_init), std::sin(angle_init)); // [m]
-            double duration = 0; // [s]
-            double duration_phase1 = duration;
-            double duration_phase2 = duration;
-            double duration_phase3 = duration;
-            double translation = translation_init;
-            double rotation = rotation_init;
-            Eigen::Vector2d position = position_init;
-            Eigen::Vector2d position_phase1 = position;
-            Eigen::Vector2d position_phase2 = position;
-            Eigen::Vector2d position_phase3 = position;
-            double theta = angle_init;
-            double x = position.x();
-            double y = position.y();
-            QQueue<double> errors;
-            double error_old = 0;
-            double error_new = 0;
-            double error_dif = 0;
-            double error_sum = 0;
-            // double Kp = RobotControlSettings::get().pidControllerSettings().kp();
-            // double Ki = RobotControlSettings::get().pidControllerSettings().ki();
-            // double Kd = RobotControlSettings::get().pidControllerSettings().kd();
-            double Kp = 50.0;
-            double Ki = 1.00;
-            double Kd = 0.05;
-            _angular_direction = angle_to_pipi(_angular_direction);
-            pose_profile.front() = elastic_band::PoseSE2Ptr(new elastic_band::PoseSE2(x, y, theta));
-            for (size_t i = 1; i < pose_profile.size(); i++) {
-                duration = i * timestep;
-                if (std::abs(_angular_direction - theta) > 1e-3) { // 1. Orientation
-                    duration_phase1 = duration;
-                    duration_phase2 = duration_phase1;
-                    duration_phase3 = duration_phase1;
-                    error_new = angle_to_pipi(_angular_direction - theta);
-                    error_dif = 0;
-                    error_sum = 0;
-                    if (errors.size() > 0) {
-                        error_dif = error_new - error_old;
-                    }
-                    if (rotation > -_config.robot.max_vel_theta && rotation < _config.robot.max_vel_theta) {
-                        errors.enqueue(error_new);
-                        for (double error : errors) {
-                            error_sum += error;
-                        }
-                    }
-                    if (duration_phase1 > timestep) {
-                        rotation = Kp * error_new + Ki * error_sum * timestep + Kd * error_dif / timestep;
-                    } else {
-                        rotation = rotation_init;
-                    }
-                    if (rotation < -_config.robot.max_vel_theta) {
-                        rotation = -_config.robot.max_vel_theta;
-                    }
-                    if (rotation > _config.robot.max_vel_theta) {
-                        rotation = _config.robot.max_vel_theta;
-                    }
-                    error_old = error_new;
-                    double dtheta = 0;
-                    if (std::abs(rotation) > 1e-6) {
-                        dtheta = rotation * timestep;
-                        Eigen::Vector2d r = Eigen::Vector2d(std::sin(theta), -std::cos(theta)) * translation / rotation;
-                        position.x() = (r.x()*std::cos(dtheta) - r.y()*std::sin(dtheta)) - r.x() + position_phase1.x();
-                        position.y() = (r.x()*std::sin(dtheta) + r.y()*std::cos(dtheta)) - r.y() + position_phase1.y();
-                    } else {
-                        position = Eigen::Vector2d(std::cos(theta), std::sin(theta)) * translation * timestep + position_phase1;
-                    }
-                    theta = angle_to_pipi(theta + dtheta);
-                    position_phase1 = position;
-                    position_phase2 = position_phase1;
-                    position_phase3 = position_phase1;
-                } else if (acceleration * (duration - duration_phase1/* + timestep*/) + translation < _peak_velocity) { // 2. Acceleration
-                    duration_phase2 = duration - duration_phase1;
-                    duration_phase3 = duration_phase2;
-                    position = Eigen::Vector2d(std::cos(theta), std::sin(theta)) * (acceleration * duration_phase2 * duration_phase2 / 2 + translation * duration_phase2) + position_phase1;
-                    position_phase2 = position;
-                    position_phase3 = position_phase2;
-                } else if (duration - duration_phase2 - duration_phase1 <= _kick_duration) { // 3. Relaxation
-                    duration_phase3 = duration - duration_phase2 - duration_phase1;
-                    position = Eigen::Vector2d(std::cos(theta), std::sin(theta)) * _peak_velocity * tau0 * (1. - std::exp(-duration_phase3 / tau0)) + position_phase2;
-                    position_phase3 = position;
-                } else {
-                    translation = duration_phase3 * _peak_velocity * tau0 * std::exp(-duration_phase3 / tau0);
-                    position = Eigen::Vector2d(std::cos(theta), std::sin(theta)) * translation * timestep + position_phase3;
+        double acceleration = _config.robot.acc_lim_x; // [m/s^2]
+        double translation_init = velocity.translation(); // [m/s]
+        double rotation_init = velocity.rotation(); // [rad/s]
+        double angle_init = pose.orientation(); // [rad]
+        Eigen::Vector2d position_init = pose.position(); // [m]
+        double duration_init = timestamp.count(); // [s]
+        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< acceleration = " << acceleration << std::endl;
+        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< translation_init = " << translation_init << std::endl;
+        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< rotation_init = " << rotation_init << std::endl;
+        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< angle_init = " << angle_init << std::endl;
+        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< position_init = " << position_init[0] << "," << position_init[1] << std::endl;
+        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< duration_init = " << duration_init << std::endl;
+        double duration = duration_init;
+        double duration_phase1 = duration;
+        double duration_phase2 = duration;
+        double duration_phase3 = duration;
+        double translation = translation_init;
+        double rotation = rotation_init;
+        Eigen::Vector2d position = position_init;
+        Eigen::Vector2d position_phase1 = position;
+        Eigen::Vector2d position_phase2 = position;
+        Eigen::Vector2d position_phase3 = position;
+        double theta = angle_init;
+        double x = position.x();
+        double y = position.y();
+        QQueue<double> errors;
+        double error_old = 0;
+        double error_new = 0;
+        double error_dif = 0;
+        double error_sum = 0;
+        // double Kp = RobotControlSettings::get().pidControllerSettings().kp();
+        // double Ki = RobotControlSettings::get().pidControllerSettings().ki();
+        // double Kd = RobotControlSettings::get().pidControllerSettings().kd();
+        double Kp = 50.0;
+        double Ki = 1.00;
+        double Kd = 0.05;
+        _angular_direction = angle_to_pipi(_angular_direction);
+        // pose_profile.front() = elastic_band::PoseSE2Ptr(new elastic_band::PoseSE2(x, y, theta));
+        pose_profile.front() = elastic_band::PoseSE2Ptr(new elastic_band::PoseSE2(_position.x, _position.y, angle_to_pipi(_agent->direction)));
+        for (size_t i = 1; i < pose_profile.size(); i++) {
+            duration = i * timestep + duration_init;
+            if (std::abs(_angular_direction - theta) > 1e-3) { // 1. Orientation
+                duration_phase1 = duration;
+                duration_phase2 = duration_phase1;
+                duration_phase3 = duration_phase1;
+                error_new = angle_to_pipi(_angular_direction - theta);
+                error_dif = 0;
+                error_sum = 0;
+                if (errors.size() > 0) {
+                    error_dif = error_new - error_old;
                 }
-                x = position.x();
-                y = position.y();
-                pose_profile.at(i) = elastic_band::PoseSE2Ptr(new elastic_band::PoseSE2(x, y, theta));
-            }
-
-            _trajectory_ref->robotParameters().wheel_radius = 0.005; // [m]
-            _trajectory_ref->robotParameters().wheel_distance = 0.018; // [m]
-            _trajectory_ref->setProfileTimestep(timestep_profile, false);
-            _trajectory_ref->setProfilePose(pose_profile);
-            // elastic_band::PoseSE2Container pose_profile = _trajectory_ref->getProfilePose();
-            // for (elastic_band::PoseSE2Container::const_iterator pose = pose_profile.begin(); pose != pose_profile.end(); pose++) {
-            //     std::cout << **pose << std::endl;
-            // }
-            // std::cout << *_trajectory_ref << std::endl;
-
-            // visualize reference trajectory
-            _plot_path_ref = elastic_band::TebPlot::plotPath               (&(*_trajectory_ref), _plot_path_ref, "Reference path");
-            _plot_pose_ref = elastic_band::TebPlot::plotProfilePose        (&(*_trajectory_ref), _plot_pose_ref, "Reference pose");
-            _plot_spd_ref  = elastic_band::TebPlot::plotProfileSpeed       (&(*_trajectory_ref), _plot_spd_ref,  "Reference speed");
-            _plot_vel_ref  = elastic_band::TebPlot::plotProfileVelocity    (&(*_trajectory_ref), _plot_vel_ref,  "Reference velocity");
-            _plot_acc_ref  = elastic_band::TebPlot::plotProfileAcceleration(&(*_trajectory_ref), _plot_acc_ref,  "Reference acceleration");
-
-            // initialize environment
-            _viapoints.clear();
-            // _viapoints.push_back(Eigen::Vector2d(0,0));
-            // _viapoints.push_back(Eigen::Vector2d(1,1));
-            _obstacles.clear();
-            // _obstacles.push_back(boost::make_shared<elastic_band::PointObstacle>(0,0));
-            // _obstacles.push_back(boost::make_shared<elastic_band::PointObstacle>(1,1));
-            _planner->initialize(_config, &_obstacles, _robot_model, _visualization, &_viapoints);
-
-            // plan subsequent trajectory
-            _planner->setVelocityStart(_trajectory_ref->trajectory().front()->velocity(), false);
-            _planner->setVelocityGoal (_trajectory_ref->trajectory().at(_trajectory_ref->trajectory().size()-2)->velocity(), false);
-            _planner->plan(*_trajectory_ref, true);
-
-            if (_planner->isOptimized()) {
-                // CHECK TRAJECTORY FEASABILITY!!! + automatic detection of convergence included a limited overall computation time availabe to return a resulting trajectory
-                const bool feasible = true;
-                if (feasible) {
-                    // store optimized trajectory
-                    // _planner->getVelocityProfile(velocity_profile);
-                    // for (elastic_band::VelocityContainer::const_iterator velocity = velocity_profile.begin(); velocity != velocity_profile.end(); velocity++) {
-                    //     std::cout << **velocity << std::endl;
-                    // }
-                    _trajectory_opt->robotParameters().wheel_radius   = _trajectory_ref->robotParameters().wheel_radius;
-                    _trajectory_opt->robotParameters().wheel_distance = _trajectory_ref->robotParameters().wheel_distance;
-                    _planner->getFullTrajectory(*_trajectory_opt);
-                     std::cout << *_trajectory_opt << std::endl;
-
-                    // compute optimization performance
-                    _planner->computeCurrentCost();
-                    double optim_cost = _planner->getCurrentCost();
-                    qDebug() << "Cost of the last optimization process =" << optim_cost;
-
-                    // visualize optimized trajectory
-                    // _planner->visualize();
-                    // _visualization->publishObstacles(_obstacles);
-                    // _visualization->publishViaPoints(_viapoints);
-                    _plot_path_opt = elastic_band::TebPlot::plotPath               (&(*_trajectory_opt), _plot_path_opt, "Optimized path");
-                    _plot_pose_opt = elastic_band::TebPlot::plotProfilePose        (&(*_trajectory_opt), _plot_pose_opt, "Optimized pose");
-                    _plot_spd_opt  = elastic_band::TebPlot::plotProfileSpeed       (&(*_trajectory_opt), _plot_spd_opt,  "Optimized speed");
-                    _plot_vel_opt  = elastic_band::TebPlot::plotProfileVelocity    (&(*_trajectory_opt), _plot_vel_opt,  "Optimized velocity");
-                    _plot_acc_opt  = elastic_band::TebPlot::plotProfileAcceleration(&(*_trajectory_opt), _plot_acc_opt,  "Optimized acceleration");
-
-                    // send control commands
-                    // (not to be done here)
-                } else {
-                    qDebug() << "The TEB planner was not able to find a feasible solution for the trajectory.";
+                if (rotation > -_config.robot.max_vel_theta && rotation < _config.robot.max_vel_theta) {
+                    errors.enqueue(error_new);
+                    for (double error : errors) {
+                        error_sum += error;
+                    }
                 }
+                if (duration_phase1 > timestep) {
+                    rotation = Kp * error_new + Ki * error_sum * timestep + Kd * error_dif / timestep;
+                } else {
+                    rotation = rotation_init;
+                }
+                if (rotation < -_config.robot.max_vel_theta) {
+                    rotation = -_config.robot.max_vel_theta;
+                }
+                if (rotation > _config.robot.max_vel_theta) {
+                    rotation = _config.robot.max_vel_theta;
+                }
+                error_old = error_new;
+                double dtheta = 0;
+                if (std::abs(rotation) > 1e-6) {
+                    dtheta = rotation * timestep;
+                    Eigen::Vector2d r = Eigen::Vector2d(std::sin(theta), -std::cos(theta)) * translation / rotation;
+                    position.x() = (r.x()*std::cos(dtheta) - r.y()*std::sin(dtheta)) - r.x() + position_phase1.x();
+                    position.y() = (r.x()*std::sin(dtheta) + r.y()*std::cos(dtheta)) - r.y() + position_phase1.y();
+                } else {
+                    position = Eigen::Vector2d(std::cos(theta), std::sin(theta)) * translation * timestep + position_phase1;
+                }
+                theta = angle_to_pipi(theta + dtheta);
+                position_phase1 = position;
+                position_phase2 = position_phase1;
+                position_phase3 = position_phase1;
+            } else if (acceleration * (duration - duration_phase1/* + timestep*/) + translation < _peak_velocity) { // 2. Acceleration
+                duration_phase2 = duration - duration_phase1;
+                duration_phase3 = duration_phase2;
+                position = Eigen::Vector2d(std::cos(theta), std::sin(theta)) * (acceleration * duration_phase2 * duration_phase2 / 2 + translation * duration_phase2) + position_phase1;
+                position_phase2 = position;
+                position_phase3 = position_phase2;
+            } else if (duration - duration_phase2 - duration_phase1 <= _kick_duration) { // 3. Relaxation
+                duration_phase3 = duration - duration_phase2 - duration_phase1;
+                position = Eigen::Vector2d(std::cos(theta), std::sin(theta)) * _peak_velocity * tau0 * (1. - std::exp(-duration_phase3 / tau0)) + position_phase2;
+                position_phase3 = position;
             } else {
-                qDebug() << "The TEB planner was not able to find an optimized solution for the trajectory.";
+                translation = duration_phase3 * _peak_velocity * tau0 * std::exp(-duration_phase3 / tau0);
+                position = Eigen::Vector2d(std::cos(theta), std::sin(theta)) * translation * timestep + position_phase3;
             }
+            x = position.x();
+            y = position.y();
+            pose_profile.at(i) = elastic_band::PoseSE2Ptr(new elastic_band::PoseSE2(x, y, theta));
+        }
+
+        _trajectory_ref->robotParameters().wheel_radius = 0.005; // [m]
+        _trajectory_ref->robotParameters().wheel_distance = 0.018; // [m]
+        _trajectory_ref->setProfileTimestep(timestep_profile, false);
+        _trajectory_ref->setProfilePose(pose_profile);
+        // elastic_band::PoseSE2Container pose_profile = _trajectory_ref->getProfilePose();
+        // for (elastic_band::PoseSE2Container::const_iterator pose = pose_profile.begin(); pose != pose_profile.end(); pose++) {
+        //     std::cout << **pose << std::endl;
+        // }
+        std::cout << *_trajectory_ref << std::endl;
+
+        // visualize reference trajectory
+        _plot_pth_ref = elastic_band::TebPlot::plotPath               (&(*_trajectory_ref), _plot_pth_ref, "Reference path");
+        _plot_pos_ref = elastic_band::TebPlot::plotProfilePose        (&(*_trajectory_ref), _plot_pos_ref, "Reference pose");
+        _plot_spd_ref = elastic_band::TebPlot::plotProfileSpeed       (&(*_trajectory_ref), _plot_spd_ref, "Reference speed");
+        _plot_vel_ref = elastic_band::TebPlot::plotProfileVelocity    (&(*_trajectory_ref), _plot_vel_ref, "Reference velocity");
+        _plot_acc_ref = elastic_band::TebPlot::plotProfileAcceleration(&(*_trajectory_ref), _plot_acc_ref, "Reference acceleration");
+
+        // initialize environment
+        // _viapoints.clear();
+        // _viapoints.push_back(Eigen::Vector2d(0,0));
+        // _viapoints.push_back(Eigen::Vector2d(1,1));
+        // _obstacles.clear();
+        // _obstacles.push_back(boost::make_shared<elastic_band::PointObstacle>(0,0));
+        // _obstacles.push_back(boost::make_shared<elastic_band::PointObstacle>(1,1));
+        _planner->initialize(_config, &_obstacles, _robot_model, _visualization, &_viapoints);
+
+        // plan subsequent trajectory
+        _planner->setVelocityStart(_trajectory_ref->trajectory().front()->velocity(), false);
+        _planner->setVelocityGoal (_trajectory_ref->trajectory().at(_trajectory_ref->trajectory().size()-2)->velocity(), false);
+        _planner->plan(*_trajectory_ref, true);
+
+        if (_planner->isOptimized()) {
+            // CHECK TRAJECTORY FEASABILITY!!! + automatic detection of convergence included a limited overall computation time availabe to return a resulting trajectory
+            const bool feasible = true;
+            if (feasible) {
+                // store optimized trajectory
+                // _planner->getVelocityProfile(velocity_profile);
+                // for (elastic_band::VelocityContainer::const_iterator velocity = velocity_profile.begin(); velocity != velocity_profile.end(); velocity++) {
+                //     std::cout << **velocity << std::endl;
+                // }
+                _trajectory_opt->robotParameters() = _trajectory_ref->robotParameters();
+                _planner->getFullTrajectory(*_trajectory_opt);
+                std::cout << *_trajectory_opt << std::endl;
+
+                // compute optimization performance
+                _planner->computeCurrentCost(&(*_trajectory_ref));
+                double optim_cost = _planner->getCurrentCost();
+                qDebug() << "Cost of the last optimization process =" << optim_cost;
+
+                // visualize optimized trajectory
+                // _planner->visualize();
+                // _visualization->publishObstacles(_obstacles);
+                // _visualization->publishViaPoints(_viapoints);
+                _plot_pth_opt = elastic_band::TebPlot::plotPath               (&(*_trajectory_opt), _plot_pth_opt, "Optimized path");
+                _plot_pos_opt = elastic_band::TebPlot::plotProfilePose        (&(*_trajectory_opt), _plot_pos_opt, "Optimized pose");
+                _plot_spd_opt = elastic_band::TebPlot::plotProfileSpeed       (&(*_trajectory_opt), _plot_spd_opt, "Optimized speed");
+                _plot_vel_opt = elastic_band::TebPlot::plotProfileVelocity    (&(*_trajectory_opt), _plot_vel_opt, "Optimized velocity");
+                _plot_acc_opt = elastic_band::TebPlot::plotProfileAcceleration(&(*_trajectory_opt), _plot_acc_opt, "Optimized acceleration");
+
+                // send control commands
+                // (not to be done here)
+            } else {
+                qDebug() << "The TEB planner was not able to find a feasible solution for the trajectory.";
+            }
+        } else {
+            qDebug() << "The TEB planner was not able to find an optimized solution for the trajectory.";
         }
 
         // update position and velocity information -- actual move step

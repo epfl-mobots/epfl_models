@@ -141,16 +141,16 @@ namespace Fishmodel {
         elastic_band::ObstacleContainer      _obstacles;
         elastic_band::TrajectoryPtr          _trajectory_ref;
         elastic_band::TrajectoryPtr          _trajectory_opt;
-        QMainWindow* _plot_path_ref = new QMainWindow();
-        QMainWindow* _plot_path_opt = new QMainWindow();
-        QMainWindow* _plot_pose_ref = new QMainWindow();
-        QMainWindow* _plot_pose_opt = new QMainWindow();
-        QMainWindow* _plot_spd_ref  = new QMainWindow();
-        QMainWindow* _plot_spd_opt  = new QMainWindow();
-        QMainWindow* _plot_vel_ref  = new QMainWindow();
-        QMainWindow* _plot_vel_opt  = new QMainWindow();
-        QMainWindow* _plot_acc_ref  = new QMainWindow();
-        QMainWindow* _plot_acc_opt  = new QMainWindow();
+        QMainWindow* _plot_pth_ref = new QMainWindow();
+        QMainWindow* _plot_pth_opt = new QMainWindow();
+        QMainWindow* _plot_pos_ref = new QMainWindow();
+        QMainWindow* _plot_pos_opt = new QMainWindow();
+        QMainWindow* _plot_spd_ref = new QMainWindow();
+        QMainWindow* _plot_spd_opt = new QMainWindow();
+        QMainWindow* _plot_vel_ref = new QMainWindow();
+        QMainWindow* _plot_vel_opt = new QMainWindow();
+        QMainWindow* _plot_acc_ref = new QMainWindow();
+        QMainWindow* _plot_acc_opt = new QMainWindow();
 
         // std::mutex _mtx;
         // std::vector<Coord_t> _trajectory;
