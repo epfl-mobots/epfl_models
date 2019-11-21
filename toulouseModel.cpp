@@ -22,13 +22,7 @@ namespace Fishmodel {
 
     ToulouseModel::ToulouseModel(Simulation& simulation, Agent* agent)
         : Behavior(simulation, agent),
-          // clang-format off
-          ARENA_CENTER(
-//              {0.3093, 0.2965}
-               {0.262, 0.255}
-
-              // clang-format on
-              )
+          ARENA_CENTER(/*{0.3093, 0.2965}*/{0.262, 0.255})
     {
         init();
     }
@@ -40,11 +34,6 @@ namespace Fishmodel {
         _timer.clear();
         _timestep = 0;
         _time = 0;
-
-        // int argc = 0;
-        // char** argv = nullptr;
-        // ros::init(argc, argv, "elastic_band");
-        // ros::NodeHandle node_handle("~");
 
         _config.trajectory.teb_autosize = false;
         _config.trajectory.dt_ref = 0.3;
@@ -157,7 +146,6 @@ namespace Fishmodel {
         _robot_shape.push_back(Eigen::Vector2d(+0.044/2, +0.022/2));
         _robot_shape.push_back(Eigen::Vector2d(-0.044/2, +0.022/2));
         _robot_model    = elastic_band::RobotFootprintModelPtr(new elastic_band::PolygonRobotFootprint(_robot_shape));
-        // _visualization  = elastic_band::TebVisualizationPtr   (new elastic_band::TebVisualization(node_handle, _config));
         _planner        = elastic_band::TebPlannerPtr(new elastic_band::TebPlanner());
         _trajectory_ref = elastic_band::TrajectoryPtr(new elastic_band::Trajectory());
         _trajectory_opt = elastic_band::TrajectoryPtr(new elastic_band::Trajectory());
@@ -175,12 +163,13 @@ namespace Fishmodel {
 
     void ToulouseModel::step()
     {
+        // Stop the process if the agent is not a robot
         std::pair<Agent*, Behavior*> current_agent(_agent, this);
         auto result = std::find(_simulation.robots.begin(), _simulation.robots.end(), current_agent);
         if (result == _simulation.robots.end())
             return;
 
-        // update the robot position as tracked by the camera and set it w.r.t. the arena center
+        // Update the robot position as tracked by the camera and set it w.r.t. the arena center
         if (_robot != nullptr) {
             _position.x = _robot->state().position().x();// - ARENA_CENTER.first;
             _position.y = _robot->state().position().y();// - ARENA_CENTER.second;
@@ -192,6 +181,7 @@ namespace Fishmodel {
         }
         qDebug() << "robot" << _position.x << _position.y << _orientation;
 
+        // Update the current time information
         if (_timer.isSet()) {
             double runtime = _timer.runTimeSec();
             _timestep = runtime - _time;
@@ -203,6 +193,7 @@ namespace Fishmodel {
         }
         qDebug() << "current model time =" << _time << "s";
 
+        // Determine if the robot should trigger a new kick
         _is_kicking = _timer.isTimedOutSec(_kick_duration);
 
         if (_is_kicking) {
@@ -210,27 +201,74 @@ namespace Fishmodel {
             _time = 0;
             qDebug() << "reset model time =" << _time << "s";
 
-            // the individuals decide on the desired position
-            stimulate(); // kicking individual goes first
+            // The individuals decide on the desired position
+            stimulate(); // Kicking individual goes first
 
-            // apply attractors/repulsors and update the fish intuitions
-            // (for the kicker, the rest are in their gliding phase)
+            // Apply attractors/repulsors and update the fish intuitions
+            // (for the kicker, the other fish are in their gliding phase)
             interact();
         }
 
-        // TEST PURPOSES
+        // FIXME: TEST PURPOSES
         _angular_direction = 0.2; // [rad]
         _peak_velocity = 0.15; // [m/s]
         _kick_duration = 1; // [s]
         tau0 = 0.8; // [s]
 
-        // determine the current pose and velocity
+        // Determine current pose and velocity
         elastic_band::PoseSE2 pose;
         elastic_band::Velocity velocity;
         elastic_band::Timestamp timestamp;
+        determineState(pose, velocity, timestamp);
+        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< pose = " << pose << std::endl;
+        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< velocity = " << velocity << std::endl;
+        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< timestamp = " << timestamp << std::endl;
+
+        // Compute reference trajectory
+        planTrajectory(pose, velocity, timestamp);
+        std::cout << *_trajectory_ref << std::endl;
+
+        // Visualize reference trajectory
+        visualizeReferenceTrajectory();
+
+        // Initialize environment
+        initializePlanner();
+
+        // Plan subsequent trajectory
+        optimizeTrajectory();
+
+        if (isTrajectoryOptimized()) {
+            if (isTrajectoryFeasible()) {
+                // Store optimized trajectory
+                fetchTrajectory();
+                std::cout << *_trajectory_opt << std::endl;
+
+                // Compute optimization performance
+                computePerformance();
+
+                // Visualize optimized trajectory
+                visualizeOptimizedTrajectory();
+
+                // Send control commands
+                // (not to be done here)
+            } else {
+                qDebug() << "The TEB planner was not able to find a feasible solution for the trajectory.";
+            }
+        } else {
+            qDebug() << "The TEB planner was not able to find an optimized solution for the trajectory.";
+        }
+
+        // Update position and velocity information (actual move step)
+        move();
+
+        _is_kicking = false;
+    }
+
+    void ToulouseModel::determineState(elastic_band::PoseSE2& pose, elastic_band::Velocity& velocity, elastic_band::Timestamp& timestamp)
+    {
         int idx = -1;
         if (_trajectory_opt->trajectory().size() > 0 && _timestep > 0) {
-            // find the trajectory index corresponding to the current position
+            // Find the trajectory index corresponding to the current position
             int timestep = _time / _timestep;
             int window = 30;
             int limit_ahead  = std::min(timestep + window / 2, static_cast<int>(_trajectory_opt->trajectory().size()) - 1);
@@ -238,7 +276,7 @@ namespace Fishmodel {
             double accuracy = 0;//0.001;
             double distance = std::numeric_limits<double>::max();
             Eigen::Vector2d position = Eigen::Vector2d(_position.x, _position.y);
-            for (int i = limit_ahead; i >= limit_behind; i--) {
+            for (int i = limit_ahead; i >= limit_behind; --i) {
                 double dist = (_trajectory_opt->trajectory().at(i)->pose().position() - position).norm();
                 qDebug() << "<<<<<<<<<<<<<<<<<<<<<<< i =" << i << "dist =" << dist;
                 if (dist < distance) {
@@ -262,39 +300,21 @@ namespace Fishmodel {
             velocity  = elastic_band::Velocity(0, 0, _orientation);
             timestamp = elastic_band::Timestamp(elastic_band::timestamp_t(0));
         }
-        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< pose = " << pose << std::endl;
-        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< velocity = " << velocity << std::endl;
-        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< timestamp = " << timestamp << std::endl;
+    }
 
-        // compute reference trajectory
+    void ToulouseModel::planTrajectory(elastic_band::PoseSE2& pose, elastic_band::Velocity& velocity, elastic_band::Timestamp& timestamp)
+    {
         // double timestep = 1. / static_cast<double>(RobotControlSettings::get().controlFrequencyHz()); // [s]
         double timestep = 0.005; // [s]
         double horizon = std::min(_kick_duration - timestamp.count(), 15 * timestep); // [s]
-        // unsigned int nb_commands = static_cast<unsigned int>(std::floor(_kick_duration / timestep)); // [#]
-        // std::chrono::milliseconds timestep_ms(static_cast<long int>(std::ceil(timestep * 1000.))); // [ms]
-        // elastic_band::TimestepPtr timestep_ptr(new elastic_band::Timestep(timestep_ms));
         size_t nb_commands = static_cast<size_t>(std::max(std::floor(horizon / timestep), 1.)); // [#]
         elastic_band::TimestepPtr timestep_ptr(new elastic_band::Timestep(elastic_band::timestep_t(timestep)));
         elastic_band::TimestepContainer timestep_profile(nb_commands - 1, timestep_ptr);
-        // elastic_band::VelocityContainer velocity_profile(nb_commands);
         elastic_band:: PoseSE2Container     pose_profile(nb_commands);
         std::cout << "<<<<<<<<<<<<<<<<<<<<<<< timestep = " << timestep << std::endl;
         std::cout << "<<<<<<<<<<<<<<<<<<<<<<< horizon = " << horizon << std::endl;
         std::cout << "<<<<<<<<<<<<<<<<<<<<<<< nb_commands = " << nb_commands << std::endl;
-/*
-        double x, y, theta;
-        // double dtheta = 2 * M_PI / 100 / M_PI * 2; // 40 [mrad]
-        // double dtheta = 2 * M_PI / 100 / M_PI * 2 / 10 / 8; // 0.5 [mrad]
-        // double dtheta = 2 * M_PI / 100 / M_PI * 2 / 10 / 4; // 1 [mrad]
-        double dtheta = 2 * M_PI / 100 / M_PI * 2 / 10 / 4 / 1.1; // 0.9 [mrad]
-        double radius = 10. / 100.; // 10 [cm]
-        for (size_t i = 0; i < pose_profile.size(); i++) {
-            theta = i * dtheta + M_PI / 2;
-            x = radius * std::cos(theta - M_PI / 2);
-            y = radius * std::sin(theta - M_PI / 2);
-            pose_profile.at(i) = elastic_band::PoseSE2Ptr(new elastic_band::PoseSE2(x, y, theta));
-        }
-*/
+
         double acceleration = _config.robot.acc_lim_x; // [m/s^2]
         double translation_init = velocity.translation(); // [m/s]
         double rotation_init = velocity.rotation(); // [rad/s]
@@ -307,6 +327,7 @@ namespace Fishmodel {
         std::cout << "<<<<<<<<<<<<<<<<<<<<<<< angle_init = " << angle_init << std::endl;
         std::cout << "<<<<<<<<<<<<<<<<<<<<<<< position_init = " << position_init[0] << "," << position_init[1] << std::endl;
         std::cout << "<<<<<<<<<<<<<<<<<<<<<<< duration_init = " << duration_init << std::endl;
+
         double duration = duration_init;
         double duration_phase1 = duration;
         double duration_phase2 = duration;
@@ -331,10 +352,12 @@ namespace Fishmodel {
         double Kp = 50.0;
         double Ki = 1.00;
         double Kd = 0.05;
+
         _angular_direction = angle_to_pipi(_angular_direction);
+
         // pose_profile.front() = elastic_band::PoseSE2Ptr(new elastic_band::PoseSE2(x, y, theta));
         pose_profile.front() = elastic_band::PoseSE2Ptr(new elastic_band::PoseSE2(_position.x, _position.y, _orientation));
-        for (size_t i = 1; i < pose_profile.size(); i++) {
+        for (size_t i = 1; i < pose_profile.size(); ++i) {
             duration = i * timestep + duration_init;
             if (std::abs(_angular_direction - theta) > 1e-3) { // 1. Orientation
                 duration_phase1 = duration;
@@ -400,74 +423,65 @@ namespace Fishmodel {
         _trajectory_ref->robotParameters().wheel_distance = 0.018; // [m]
         _trajectory_ref->setProfileTimestep(timestep_profile, false);
         _trajectory_ref->setProfilePose(pose_profile);
-        // elastic_band::PoseSE2Container pose_profile = _trajectory_ref->getProfilePose();
-        // for (elastic_band::PoseSE2Container::const_iterator pose = pose_profile.begin(); pose != pose_profile.end(); pose++) {
-        //     std::cout << **pose << std::endl;
-        // }
-        std::cout << *_trajectory_ref << std::endl;
+    }
 
-        // visualize reference trajectory
+    void ToulouseModel::initializePlanner()
+    {
+        // _viapoints.clear();
+        // _obstacles.clear();
+        // _obstacles.push_back(elastic_band::ObstaclePtr(new elastic_band::CircularObstacle(ARENA_CENTER.first, ARENA_CENTER.second, radius)));
+        _planner->initialize(_config, &_obstacles, _robot_model, _visualization, &_viapoints);
+    }
+
+    void ToulouseModel::optimizeTrajectory()
+    {
+        _planner->setVelocityStart(_trajectory_ref->trajectory().front()->velocity(), false);
+        _planner->setVelocityGoal (_trajectory_ref->trajectory().at(_trajectory_ref->trajectory().size()-2)->velocity(), false);
+        _planner->plan(*_trajectory_ref, true);
+    }
+
+    void ToulouseModel::fetchTrajectory()
+    {
+        _trajectory_opt->robotParameters() = _trajectory_ref->robotParameters();
+        _planner->getFullTrajectory(*_trajectory_opt);
+    }
+
+    void ToulouseModel::computePerformance()
+    {
+        _planner->computeCurrentCost(&(*_trajectory_ref));
+        double optim_cost = _planner->getCurrentCost();
+        qDebug() << "Cost of the last optimization process =" << optim_cost;
+    }
+
+    bool ToulouseModel::isTrajectoryOptimized()
+    {
+        const bool optimized = _planner->isOptimized();
+        return optimized;
+    }
+
+    bool ToulouseModel::isTrajectoryFeasible()
+    {
+        // CHECK TRAJECTORY FEASABILITY!!! + automatic detection of convergence including a limited overall computation time availabe to return a resulting trajectory
+        const bool feasible = true;
+        return feasible;
+    }
+
+    void ToulouseModel::visualizeReferenceTrajectory()
+    {
         _plot_pth_ref = elastic_band::TebPlot::plotPath               (&(*_trajectory_ref), _plot_pth_ref, "Reference path");
         _plot_pos_ref = elastic_band::TebPlot::plotProfilePose        (&(*_trajectory_ref), _plot_pos_ref, "Reference pose");
         _plot_spd_ref = elastic_band::TebPlot::plotProfileSpeed       (&(*_trajectory_ref), _plot_spd_ref, "Reference speed");
         _plot_vel_ref = elastic_band::TebPlot::plotProfileVelocity    (&(*_trajectory_ref), _plot_vel_ref, "Reference velocity");
         _plot_acc_ref = elastic_band::TebPlot::plotProfileAcceleration(&(*_trajectory_ref), _plot_acc_ref, "Reference acceleration");
+    }
 
-        // initialize environment
-        // _viapoints.clear();
-        // _viapoints.push_back(Eigen::Vector2d(0,0));
-        // _viapoints.push_back(Eigen::Vector2d(1,1));
-        // _obstacles.clear();
-        // _obstacles.push_back(boost::make_shared<elastic_band::PointObstacle>(0,0));
-        // _obstacles.push_back(boost::make_shared<elastic_band::PointObstacle>(1,1));
-        _planner->initialize(_config, &_obstacles, _robot_model, _visualization, &_viapoints);
-
-        // plan subsequent trajectory
-        _planner->setVelocityStart(_trajectory_ref->trajectory().front()->velocity(), false);
-        _planner->setVelocityGoal (_trajectory_ref->trajectory().at(_trajectory_ref->trajectory().size()-2)->velocity(), false);
-        _planner->plan(*_trajectory_ref, true);
-
-        if (_planner->isOptimized()) {
-            // CHECK TRAJECTORY FEASABILITY!!! + automatic detection of convergence included a limited overall computation time availabe to return a resulting trajectory
-            const bool feasible = true;
-            if (feasible) {
-                // store optimized trajectory
-                // _planner->getVelocityProfile(velocity_profile);
-                // for (elastic_band::VelocityContainer::const_iterator velocity = velocity_profile.begin(); velocity != velocity_profile.end(); velocity++) {
-                //     std::cout << **velocity << std::endl;
-                // }
-                _trajectory_opt->robotParameters() = _trajectory_ref->robotParameters();
-                _planner->getFullTrajectory(*_trajectory_opt);
-                std::cout << *_trajectory_opt << std::endl;
-
-                // compute optimization performance
-                _planner->computeCurrentCost(&(*_trajectory_ref));
-                double optim_cost = _planner->getCurrentCost();
-                qDebug() << "Cost of the last optimization process =" << optim_cost;
-
-                // visualize optimized trajectory
-                // _planner->visualize();
-                // _visualization->publishObstacles(_obstacles);
-                // _visualization->publishViaPoints(_viapoints);
-                _plot_pth_opt = elastic_band::TebPlot::plotPath               (&(*_trajectory_opt), _plot_pth_opt, "Optimized path");
-                _plot_pos_opt = elastic_band::TebPlot::plotProfilePose        (&(*_trajectory_opt), _plot_pos_opt, "Optimized pose");
-                _plot_spd_opt = elastic_band::TebPlot::plotProfileSpeed       (&(*_trajectory_opt), _plot_spd_opt, "Optimized speed");
-                _plot_vel_opt = elastic_band::TebPlot::plotProfileVelocity    (&(*_trajectory_opt), _plot_vel_opt, "Optimized velocity");
-                _plot_acc_opt = elastic_band::TebPlot::plotProfileAcceleration(&(*_trajectory_opt), _plot_acc_opt, "Optimized acceleration");
-
-                // send control commands
-                // (not to be done here)
-            } else {
-                qDebug() << "The TEB planner was not able to find a feasible solution for the trajectory.";
-            }
-        } else {
-            qDebug() << "The TEB planner was not able to find an optimized solution for the trajectory.";
-        }
-
-        // update position and velocity information -- actual move step
-        move();
-
-        _is_kicking = false;
+    void ToulouseModel::visualizeOptimizedTrajectory()
+    {
+        _plot_pth_opt = elastic_band::TebPlot::plotPath               (&(*_trajectory_opt), _plot_pth_opt, "Optimized path");
+        _plot_pos_opt = elastic_band::TebPlot::plotProfilePose        (&(*_trajectory_opt), _plot_pos_opt, "Optimized pose");
+        _plot_spd_opt = elastic_band::TebPlot::plotProfileSpeed       (&(*_trajectory_opt), _plot_spd_opt, "Optimized speed");
+        _plot_vel_opt = elastic_band::TebPlot::plotProfileVelocity    (&(*_trajectory_opt), _plot_vel_opt, "Optimized velocity");
+        _plot_acc_opt = elastic_band::TebPlot::plotProfileAcceleration(&(*_trajectory_opt), _plot_acc_opt, "Optimized acceleration");
     }
 
     QList<double> ToulouseModel::getSpeedCommands() const
@@ -476,8 +490,8 @@ namespace Fishmodel {
         elastic_band::VelocityContainer velocity_profile;
         _trajectory_opt->getProfileVelocity(velocity_profile);
         speeds.reserve(static_cast<int>(2 * velocity_profile.size()));
-        for (size_t i = 0; i < velocity_profile.size(); i++) {
-            // convert speeds from [rad/s] to [cm/s]
+        for (size_t i = 0; i < velocity_profile.size(); ++i) {
+            // Convert speeds from [rad/s] to [cm/s]
             velocity_profile.at(i)->wheel() *= velocity_profile.at(i)->getRadius() * 100.;
             speeds.append(velocity_profile.at(i)->wheel()[0]);
             speeds.append(velocity_profile.at(i)->wheel()[1]);
@@ -487,8 +501,7 @@ namespace Fishmodel {
 
     void ToulouseModel::stimulate()
     {
-        // TODO: kick length is not initialized the first time !!
-        //_time += _kick_duration;
+        // TODO: kick length is not initialized the first time!
         _desired_position.x = _position.x + _kick_length * std::cos(_angular_direction);
         _desired_position.y = _position.y + _kick_length * std::sin(_angular_direction);
 
@@ -500,7 +513,7 @@ namespace Fishmodel {
     {
         int num_fish = _simulation.agents.size();
 
-        // computing the state for the focal individual
+        // Compute the state for the focal individual
         // distances -> distances to neighbours
         // perception -> angle of focal individual compared to neighbours
         // thetas -> angles to center
@@ -508,10 +521,10 @@ namespace Fishmodel {
         Eigen::VectorXd distances, perception, thetas, phis;
         std::tie(distances, perception, thetas, phis) = compute_state();
 
-        // indices to nearest neighbours
+        // Indices to nearest neighbours
         std::vector<int> nn_idcs = sort_neighbours(distances, _id, Order::INCREASING);
 
-        // compute influence from the environment to the focal fish
+        // Compute influence from the environment to the focal fish
         Eigen::VectorXd influence = Eigen::VectorXd::Zero(num_fish);
         for (int i = 0; i < num_fish; ++i) {
             auto model = std::static_pointer_cast<ToulouseModel>(_simulation.agents[i].second);
@@ -519,61 +532,47 @@ namespace Fishmodel {
                 continue;
 
             double attraction = wall_distance_attractor(distances(i), radius)
-                * wall_perception_attractor(perception(i)) * wall_angle_attractor(phis(i));
+                              * wall_perception_attractor(perception(i))
+                              * wall_angle_attractor(phis(i));
 
             double alignment = alignment_distance_attractor(distances(i), radius)
-                * alignment_perception_attractor(perception(i))
-                * alignment_angle_attractor(phis(i));
+                             * alignment_perception_attractor(perception(i))
+                             * alignment_angle_attractor(phis(i));
 
             influence(i) = std::abs(attraction + alignment);
         }
 
-        // indices to highly influential individuals
+        // Indices to highly influential individuals
         std::vector<int> inf_idcs = sort_neighbours(influence, _id, Order::DECREASING);
 
-        // in case the influence from neighbouring fish is insignificant,
+        // In case the influence from neighbouring fish is insignificant,
         // then use the nearest neighbours
         double inf_sum = std::accumulate(influence.data(), influence.data() + influence.size(), 0.);
         std::vector<int> idcs = inf_idcs;
         if (inf_sum < 1.0e-6)
             idcs = nn_idcs;
 
-        // step using the model
+        // Step using the model
         double r_w, theta_w;
         std::tie(r_w, theta_w) = model_stepper(radius);
 
         double qx, qy;
         do {
+            // TODO: select a random direction / direction toward the center of the arena if stuck for too long
             qDebug() << "stuck";
-            stepper(); // decide on the next kick length, duration, peak velocity
+            stepper(); // Decide on the next kick length, kick duration, peak velocity
             free_will(state_t{distances, perception, thetas, phis},
                       std::tuple<double, double>{r_w, theta_w},
-                      idcs); // throw in some free will
+                      idcs); // Throw in some free will
 
-            // rejection test -- don't want to hit the wall
+            // Rejection test (do not want to hit the wall)
             qx = _desired_position.x + (_kick_length + body_length) * std::cos(_angular_direction);
             qy = _desired_position.y + (_kick_length + body_length) * std::sin(_angular_direction);
 
-            qDebug() << std::sqrt(qx * qx + qy * qy) << " " << qx << " " << qy << " " << _position.x
-                     << " " << _position.y;
+            qDebug() << std::sqrt(qx * qx + qy * qy) << qx << qy << _position.x << _position.y;
         } while (std::sqrt(qx * qx + qy * qy) > radius);
     }
-/*
-    void ToulouseModel::move()
-    {
-        // kicker advancing to the new position
-        _position = _desired_position;
-        _speed = _desired_speed;
 
-        //        _position.x += ARENA_CENTER.first;
-        //        _position.y += ARENA_CENTER.second;
-
-        _agent->headPos.first = _position.x + ARENA_CENTER.first;
-        _agent->headPos.second = _position.y + ARENA_CENTER.second;
-        //        _agent->updateAgentPosition(_simulation.dt);
-        _agent->updateAgentPosition(_kick_duration);
-    }
-*/
     void ToulouseModel::move()
     {
         // Compute updated position along trajectory
@@ -583,7 +582,7 @@ namespace Fishmodel {
         _desired_position.x = _position.x + positionUpgrade * std::cos(_angular_direction);
         _desired_position.y = _position.y + positionUpgrade * std::sin(_angular_direction);
 
-        // Kicker advances to the new position
+        // Advance kicker to the new position
         _speed.vx = _timestep > 0 ? (_desired_position.x - _position.x) / _timestep : 0;
         _speed.vy = _timestep > 0 ? (_desired_position.y - _position.y) / _timestep : 0;
         _position = _desired_position;
@@ -610,8 +609,7 @@ namespace Fishmodel {
             double posy = fish->position().y;
             double direction = fish->angular_direction();
 
-            distances(i) = std::sqrt(
-                std::pow(_desired_position.x - posx, 2) + std::pow(_desired_position.y - posy, 2));
+            distances(i) = std::sqrt(std::pow(_desired_position.x - posx, 2) + std::pow(_desired_position.y - posy, 2));
 
             thetas(i) = std::atan2(posy - _desired_position.y, posx - _desired_position.x);
 
@@ -623,13 +621,11 @@ namespace Fishmodel {
         return state_t{distances, perception, thetas, phis};
     }
 
-    std::vector<int> ToulouseModel::sort_neighbours(
-        const Eigen::VectorXd& values, const int kicker_idx, Order order) const
+    std::vector<int> ToulouseModel::sort_neighbours(const Eigen::VectorXd& values, const int kicker_idx, Order order) const
     {
         std::vector<int> neigh_idcs;
         for (int i = 0; i < values.rows(); ++i) {
-            auto model
-                = std::static_pointer_cast<ToulouseModel>(_simulation.agents[kicker_idx].second);
+            auto model = std::static_pointer_cast<ToulouseModel>(_simulation.agents[kicker_idx].second);
             if (model->id() == _id)
                 continue;
             neigh_idcs.push_back(i);
@@ -682,8 +678,8 @@ namespace Fishmodel {
         double dphi_attraction = 0;
         double dphi_ali = 0;
         if (idcs.size() >= perceived_agents) {
-            for (int j = 0; j < perceived_agents; ++j) {
-                int fidx = idcs[j];
+            for (int i = 0; i < perceived_agents; ++i) {
+                int fidx = idcs[i];
                 dphi_attraction += wall_distance_attractor(distances(fidx), radius)
                     * wall_perception_attractor(perception(fidx)) * wall_angle_attractor(phis(fidx));
                 dphi_ali += alignment_distance_attractor(distances(fidx), radius)

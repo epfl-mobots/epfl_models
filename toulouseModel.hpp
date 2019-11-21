@@ -103,6 +103,17 @@ namespace Fishmodel {
         double time_coef;
 
     protected:
+        void determineState(elastic_band::PoseSE2& pose, elastic_band::Velocity& velocity, elastic_band::Timestamp& timestamp);
+        void planTrajectory(elastic_band::PoseSE2& pose, elastic_band::Velocity& velocity, elastic_band::Timestamp& timestamp);
+        void initializePlanner();
+        void optimizeTrajectory();
+        void fetchTrajectory();
+        void computePerformance();
+        bool isTrajectoryOptimized();
+        bool isTrajectoryFeasible();
+        void visualizeReferenceTrajectory();
+        void visualizeOptimizedTrajectory();
+
         double wall_distance_interaction(double gamma_wall, double wall_interaction_range, double ag_radius, double radius) const;
         double wall_angle_interaction(double theta) const;
 
