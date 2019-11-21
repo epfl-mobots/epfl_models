@@ -1,6 +1,8 @@
 #ifndef TOULOUSEMODEL_HPP
 #define TOULOUSEMODEL_HPP
 
+#include <Timer.hpp>
+#include <FishBot.hpp>
 #include <AgentState.hpp>
 #include <CoordinatesConversion.hpp>
 
@@ -38,8 +40,7 @@ namespace Fishmodel {
 
     class ToulouseModel;
     using state_t = std::tuple<Eigen::VectorXd, Eigen::VectorXd, Eigen::VectorXd, Eigen::VectorXd>;
-    using const_state_t
-        = const std::tuple<Eigen::VectorXd, Eigen::VectorXd, Eigen::VectorXd, Eigen::VectorXd>&;
+    using const_state_t = const std::tuple<Eigen::VectorXd, Eigen::VectorXd, Eigen::VectorXd, Eigen::VectorXd>&;
 
     class ToulouseModel : public Behavior {
     public:
@@ -57,16 +58,18 @@ namespace Fishmodel {
 
         void stepper();
         std::tuple<double, double> model_stepper(double radius) const;
-        void free_will(const_state_t state, const std::tuple<double, double>& model_out,
-            const std::vector<int>& idcs);
+        void free_will(const_state_t state, const std::tuple<double, double>& model_out, const std::vector<int>& idcs);
 
         Position<double> position() const;
         Position<double>& position();
+        double orientation() const;
+        double& orientation();
 
         double time_kicker() const;
 
         double time() const;
         double& time();
+
         double angular_direction() const;
         double& angular_direction();
         double kick_duration() const;
@@ -76,11 +79,14 @@ namespace Fishmodel {
         double peak_velocity() const;
         double& peak_velocity();
 
-        bool& is_kicking();
         bool is_kicking() const;
+        bool& is_kicking();
 
         int id() const;
         int& id();
+
+        FishBot* robot() const;
+        FishBot*& robot();
 
         double radius;
 
@@ -97,8 +103,7 @@ namespace Fishmodel {
         double time_coef;
 
     protected:
-        double wall_distance_interaction(double gamma_wall, double wall_interaction_range,
-            double ag_radius, double radius) const;
+        double wall_distance_interaction(double gamma_wall, double wall_interaction_range, double ag_radius, double radius) const;
         double wall_angle_interaction(double theta) const;
 
         double wall_distance_attractor(double distance, double radius) const;
@@ -110,16 +115,15 @@ namespace Fishmodel {
         double alignment_angle_attractor(double phi) const;
 
         state_t compute_state() const;
-        std::vector<int> sort_neighbours(const Eigen::VectorXd& values, const int kicker_idx,
-            Order order = Order::INCREASING) const;
+        std::vector<int> sort_neighbours(const Eigen::VectorXd& values, const int kicker_idx, Order order = Order::INCREASING) const;
 
         double angle_to_pipi(double difference) const;
 
-        // FishParams _fish_params;
         Position<double> _desired_position;
         Speed<double> _desired_speed;
         Position<double> _position;
         Speed<double> _speed;
+        double _orientation;
 
         bool _is_kicking;
 
@@ -127,9 +131,15 @@ namespace Fishmodel {
         double _peak_velocity;
         double _kick_length;
         double _kick_duration;
-        double _current_time;
+
+        double _timestep;
         double _time;
+        Timer _timer;
+
         int _id;
+
+        // Pointer to the robot that is potentially controlled by this model
+        FishBot* _robot = nullptr;
 
         // Timed Elastic Band
         elastic_band::TebConfig              _config;
@@ -151,9 +161,6 @@ namespace Fishmodel {
         QMainWindow* _plot_vel_opt = new QMainWindow();
         QMainWindow* _plot_acc_ref = new QMainWindow();
         QMainWindow* _plot_acc_opt = new QMainWindow();
-
-        // std::mutex _mtx;
-        // std::vector<Coord_t> _trajectory;
 
         CoordinatesConversionPtr _coordinatesConversion;
         const Coord_t ARENA_CENTER;

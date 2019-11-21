@@ -37,8 +37,9 @@ namespace Fishmodel {
 
     void ToulouseModel::reinit()
     {
+        _timer.clear();
+        _timestep = 0;
         _time = 0;
-        _current_time = 0;
 
         // int argc = 0;
         // char** argv = nullptr;
@@ -168,65 +169,44 @@ namespace Fishmodel {
 
         stepper();
         _position.x = -(_id - 1. - _simulation.agents.size() / 2) * body_length;
-        angular_direction() = _id * 2. * M_PI / (_simulation.agents.size() + 1);
         _position.y = -0.1;
+        _angular_direction = _id * 2. * M_PI / (_simulation.agents.size() + 1);
     }
 
     void ToulouseModel::step()
     {
-#if 0
-        qDebug() << _agent->headPos.first << " " << _agent->headPos.second;
-
-        _position.x = _agent->headPos.first;
-        _position.y = _agent->headPos.second;
-
-        _agent->headPos.first = ARENA_CENTER.first + 0.25 * std::cos(_time * M_PI / 180);
-        _agent->headPos.second = ARENA_CENTER.second + 0.25 * std::sin(_time * M_PI / 180);
-        //        _agent->headPos.first = ARENA_CENTER.first;
-        //        _agent->headPos.second = ARENA_CENTER.second;
-        _agent->direction = 0;
-
-        _time += 5;
-        if (_time > 360)
-            _time = 0;
-        _agent->updateAgentPosition(_simulation.dt);
-
-#else
-        static int count = 0;
-
-        //        if (count++ == 0) {
-        //            _speed.vx = (_agent->headPos.first - _position.x) / _simulation.dt;
-        //            _speed.vy = (_agent->headPos.second - _position.y) / _simulation.dt;
-
-        //            _position.x = _agent->headPos.first - ARENA_CENTER.first;
-        //            _position.y = _agent->headPos.second - ARENA_CENTER.second;
-        //        }
-        //        else {
-        //        _position.x -= ARENA_CENTER.first;
-        //        _position.y -= ARENA_CENTER.second;
-        //            qDebug() << "disregarding current position";
-        //        }
-
-        //        _angular_direction = angle_to_pipi(_agent->direction);
-
         std::pair<Agent*, Behavior*> current_agent(_agent, this);
         auto result = std::find(_simulation.robots.begin(), _simulation.robots.end(), current_agent);
         if (result == _simulation.robots.end())
             return;
 
-        // update the robot position as tracked by the camera and center it
-        _position.x = _agent->headPos.first  - ARENA_CENTER.first;
-        _position.y = _agent->headPos.second - ARENA_CENTER.second;
+        // update the robot position as tracked by the camera and set it w.r.t. the arena center
+        if (_robot != nullptr) {
+            _position.x = _robot->state().position().x();// - ARENA_CENTER.first;
+            _position.y = _robot->state().position().y();// - ARENA_CENTER.second;
+            _orientation = angle_to_pipi(_robot->state().orientation().angleRad());
+        } else {
+            _position.x = _agent->headPos.first  - ARENA_CENTER.first;
+            _position.y = _agent->headPos.second - ARENA_CENTER.second;
+            _orientation = angle_to_pipi(_agent->direction);
+        }
+        qDebug() << "robot" << _position.x << _position.y << _orientation;
 
-        qDebug() << "robot" << _position.x << _position.y << angle_to_pipi(_agent->direction);
-
-        _time += _simulation.dt;
+        if (_timer.isSet()) {
+            double runtime = _timer.runTimeSec();
+            _timestep = runtime - _time;
+            _time = runtime;
+        } else {
+            _timer.reset();
+            _timestep = 0;
+            _time = 0;
+        }
         qDebug() << "current model time =" << _time << "s";
 
-        //_is_kicking = true;
-        _is_kicking = (_time >= _kick_duration);
+        _is_kicking = _timer.isTimedOutSec(_kick_duration);
 
         if (_is_kicking) {
+            _timer.reset();
             _time = 0;
             qDebug() << "reset model time =" << _time << "s";
 
@@ -241,7 +221,7 @@ namespace Fishmodel {
         // TEST PURPOSES
         _angular_direction = 0.2; // [rad]
         _peak_velocity = 0.15; // [m/s]
-        _kick_duration = 1.008; // [s]
+        _kick_duration = 1; // [s]
         tau0 = 0.8; // [s]
 
         // determine the current pose and velocity
@@ -249,9 +229,9 @@ namespace Fishmodel {
         elastic_band::Velocity velocity;
         elastic_band::Timestamp timestamp;
         int idx = -1;
-        if (_trajectory_opt->trajectory().size() > 0) {
+        if (_trajectory_opt->trajectory().size() > 0 && _timestep > 0) {
             // find the trajectory index corresponding to the current position
-            int timestep = _time / _simulation.dt;
+            int timestep = _time / _timestep;
             int window = 30;
             int limit_ahead  = std::min(timestep + window / 2, static_cast<int>(_trajectory_opt->trajectory().size()) - 1);
             int limit_behind = std::max(timestep - window / 2, 0);
@@ -278,8 +258,8 @@ namespace Fishmodel {
             timestamp = _trajectory_opt->trajectory().at(idx)->timestamp();
         } else {
             qDebug() << "<<<<<<<<<<<<<<<<<<<<<<< idx < 0";
-            pose      = elastic_band::PoseSE2(_position.x, _position.y, angle_to_pipi(_agent->direction));
-            velocity  = elastic_band::Velocity(0, 0, angle_to_pipi(_agent->direction));
+            pose      = elastic_band::PoseSE2(_position.x, _position.y, _orientation);
+            velocity  = elastic_band::Velocity(0, 0, _orientation);
             timestamp = elastic_band::Timestamp(elastic_band::timestamp_t(0));
         }
         std::cout << "<<<<<<<<<<<<<<<<<<<<<<< pose = " << pose << std::endl;
@@ -353,7 +333,7 @@ namespace Fishmodel {
         double Kd = 0.05;
         _angular_direction = angle_to_pipi(_angular_direction);
         // pose_profile.front() = elastic_band::PoseSE2Ptr(new elastic_band::PoseSE2(x, y, theta));
-        pose_profile.front() = elastic_band::PoseSE2Ptr(new elastic_band::PoseSE2(_position.x, _position.y, angle_to_pipi(_agent->direction)));
+        pose_profile.front() = elastic_band::PoseSE2Ptr(new elastic_band::PoseSE2(_position.x, _position.y, _orientation));
         for (size_t i = 1; i < pose_profile.size(); i++) {
             duration = i * timestep + duration_init;
             if (std::abs(_angular_direction - theta) > 1e-3) { // 1. Orientation
@@ -488,7 +468,6 @@ namespace Fishmodel {
         move();
 
         _is_kicking = false;
-#endif
     }
 
     QList<double> ToulouseModel::getSpeedCommands() const
@@ -599,21 +578,21 @@ namespace Fishmodel {
     {
         // Compute updated position along trajectory
         double positionUpgrade = _peak_velocity * tau0 *
-                                 (std::exp(-(_time > _simulation.dt ? _time - _simulation.dt : 0) / tau0)
+                                 (std::exp(-(_time > _timestep ? _time - _timestep : 0) / tau0)
                                 - std::exp(- _time / tau0));
         _desired_position.x = _position.x + positionUpgrade * std::cos(_angular_direction);
         _desired_position.y = _position.y + positionUpgrade * std::sin(_angular_direction);
 
         // Kicker advances to the new position
-        _speed.vx = (_desired_position.x - _position.x) / _simulation.dt;
-        _speed.vy = (_desired_position.y - _position.y) / _simulation.dt;
+        _speed.vx = _timestep > 0 ? (_desired_position.x - _position.x) / _timestep : 0;
+        _speed.vy = _timestep > 0 ? (_desired_position.y - _position.y) / _timestep : 0;
         _position = _desired_position;
 
         // Update robot position
         _agent->speed = std::sqrt(std::pow(_speed.vx, 2) + std::pow(_speed.vx, 2));
         _agent->headPos.first  = _position.x + ARENA_CENTER.first;
         _agent->headPos.second = _position.y + ARENA_CENTER.second;
-        _agent->updateAgentPosition(_simulation.dt);
+        _agent->updateAgentPosition(_timestep);
     }
 
     state_t ToulouseModel::compute_state() const
@@ -789,6 +768,9 @@ namespace Fishmodel {
     Position<double> ToulouseModel::position() const { return _position; }
     Position<double>& ToulouseModel::position() { return _position; }
 
+    double ToulouseModel::orientation() const { return _orientation; }
+    double& ToulouseModel::orientation() { return _orientation; }
+
     double ToulouseModel::time_kicker() const { return _time + _kick_duration; }
 
     double ToulouseModel::time() const { return _time; }
@@ -811,5 +793,8 @@ namespace Fishmodel {
 
     int ToulouseModel::id() const { return _id; }
     int& ToulouseModel::id() { return _id; }
+
+    FishBot* ToulouseModel::robot() const { return _robot; }
+    FishBot*& ToulouseModel::robot() { return _robot; }
 
 } // namespace Fishmodel
