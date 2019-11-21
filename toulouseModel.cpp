@@ -269,15 +269,15 @@ namespace Fishmodel {
         int idx = -1;
         if (_trajectory_opt->trajectory().size() > 0 && _timestep > 0) {
             // Find the trajectory index corresponding to the current position
-            int timestep = _time / _timestep;
-            int window = 30;
-            int limit_ahead  = std::min(timestep + window / 2, static_cast<int>(_trajectory_opt->trajectory().size()) - 1);
-            int limit_behind = std::max(timestep - window / 2, 0);
-            double accuracy = 0;//0.001;
+            const int timestep = _time / _timestep;
+            const int window = 30;
+            const int limit_ahead  = std::min(timestep + window / 2, static_cast<int>(_trajectory_opt->trajectory().size()) - 1);
+            const int limit_behind = std::max(timestep - window / 2, 0);
+            const double accuracy = 0;//0.001;
             double distance = std::numeric_limits<double>::max();
             Eigen::Vector2d position = Eigen::Vector2d(_position.x, _position.y);
             for (int i = limit_ahead; i >= limit_behind; --i) {
-                double dist = (_trajectory_opt->trajectory().at(i)->pose().position() - position).norm();
+                const double dist = (_trajectory_opt->trajectory().at(i)->pose().position() - position).norm();
                 qDebug() << "<<<<<<<<<<<<<<<<<<<<<<< i =" << i << "dist =" << dist;
                 if (dist < distance) {
                     distance = dist;
@@ -304,29 +304,24 @@ namespace Fishmodel {
 
     void ToulouseModel::planTrajectory(elastic_band::PoseSE2& pose, elastic_band::Velocity& velocity, elastic_band::Timestamp& timestamp)
     {
-        // double timestep = 1. / static_cast<double>(RobotControlSettings::get().controlFrequencyHz()); // [s]
-        double timestep = 0.005; // [s]
-        double horizon = std::min(_kick_duration - timestamp.count(), 15 * timestep); // [s]
-        size_t nb_commands = static_cast<size_t>(std::max(std::floor(horizon / timestep), 1.)); // [#]
-        elastic_band::TimestepPtr timestep_ptr(new elastic_band::Timestep(elastic_band::timestep_t(timestep)));
+        const double timestep = 0.005; // [s]
+        const double horizon = std::min(_kick_duration - timestamp.count(), 15 * timestep); // [s]
+        const size_t nb_commands = static_cast<size_t>(std::max(std::floor(horizon / timestep), 1.)); // [#]
+        qDebug() << "<<<<<<<<<<<<<<<<<<<<<<< timestep = " << timestep;
+        qDebug() << "<<<<<<<<<<<<<<<<<<<<<<< horizon = " << horizon;
+        qDebug() << "<<<<<<<<<<<<<<<<<<<<<<< nb_commands = " << nb_commands;
+
+        elastic_band::TimestepPtr       timestep_ptr(new elastic_band::Timestep(elastic_band::timestep_t(timestep)));
         elastic_band::TimestepContainer timestep_profile(nb_commands - 1, timestep_ptr);
         elastic_band:: PoseSE2Container     pose_profile(nb_commands);
-        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< timestep = " << timestep << std::endl;
-        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< horizon = " << horizon << std::endl;
-        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< nb_commands = " << nb_commands << std::endl;
 
-        double acceleration = _config.robot.acc_lim_x; // [m/s^2]
-        double translation_init = velocity.translation(); // [m/s]
-        double rotation_init = velocity.rotation(); // [rad/s]
-        double angle_init = pose.orientation(); // [rad]
-        Eigen::Vector2d position_init = pose.position(); // [m]
-        double duration_init = timestamp.count(); // [s]
-        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< acceleration = " << acceleration << std::endl;
-        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< translation_init = " << translation_init << std::endl;
-        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< rotation_init = " << rotation_init << std::endl;
-        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< angle_init = " << angle_init << std::endl;
-        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< position_init = " << position_init[0] << "," << position_init[1] << std::endl;
-        std::cout << "<<<<<<<<<<<<<<<<<<<<<<< duration_init = " << duration_init << std::endl;
+        const double acceleration = _config.robot.acc_lim_x; // [m/s^2]
+
+        const Eigen::Vector2d position_init = pose.position();        // [m]
+        const double       orientation_init = pose.orientation();     // [rad]
+        const double       translation_init = velocity.translation(); // [m/s]
+        const double          rotation_init = velocity.rotation();    // [rad/s]
+        const double          duration_init = timestamp.count();      // [s]
 
         double duration = duration_init;
         double duration_phase1 = duration;
@@ -338,24 +333,21 @@ namespace Fishmodel {
         Eigen::Vector2d position_phase1 = position;
         Eigen::Vector2d position_phase2 = position;
         Eigen::Vector2d position_phase3 = position;
-        double theta = angle_init;
+        double theta = orientation_init;
         double x = position.x();
         double y = position.y();
+
+        const double Kp = 50.0;
+        const double Ki = 1.00;
+        const double Kd = 0.05;
         QQueue<double> errors;
         double error_old = 0;
         double error_new = 0;
         double error_dif = 0;
         double error_sum = 0;
-        // double Kp = RobotControlSettings::get().pidControllerSettings().kp();
-        // double Ki = RobotControlSettings::get().pidControllerSettings().ki();
-        // double Kd = RobotControlSettings::get().pidControllerSettings().kd();
-        double Kp = 50.0;
-        double Ki = 1.00;
-        double Kd = 0.05;
 
         _angular_direction = angle_to_pipi(_angular_direction);
 
-        // pose_profile.front() = elastic_band::PoseSE2Ptr(new elastic_band::PoseSE2(x, y, theta));
         pose_profile.front() = elastic_band::PoseSE2Ptr(new elastic_band::PoseSE2(_position.x, _position.y, _orientation));
         for (size_t i = 1; i < pose_profile.size(); ++i) {
             duration = i * timestep + duration_init;
@@ -437,6 +429,8 @@ namespace Fishmodel {
     {
         _planner->setVelocityStart(_trajectory_ref->trajectory().front()->velocity(), false);
         _planner->setVelocityGoal (_trajectory_ref->trajectory().at(_trajectory_ref->trajectory().size()-2)->velocity(), false);
+        // TODO: limited overall computation time availabe to return a resulting trajectory
+        // TODO: agent interdependency graph optimization
         _planner->plan(*_trajectory_ref, true);
     }
 
@@ -449,7 +443,7 @@ namespace Fishmodel {
     void ToulouseModel::computePerformance()
     {
         _planner->computeCurrentCost(&(*_trajectory_ref));
-        double optim_cost = _planner->getCurrentCost();
+        const double optim_cost = _planner->getCurrentCost();
         qDebug() << "Cost of the last optimization process =" << optim_cost;
     }
 
@@ -461,7 +455,7 @@ namespace Fishmodel {
 
     bool ToulouseModel::isTrajectoryFeasible()
     {
-        // CHECK TRAJECTORY FEASABILITY!!! + automatic detection of convergence including a limited overall computation time availabe to return a resulting trajectory
+        // TODO: CHECK TRAJECTORY FEASABILITY!
         const bool feasible = true;
         return feasible;
     }
