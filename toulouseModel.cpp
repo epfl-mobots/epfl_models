@@ -1,5 +1,6 @@
 #include "toulouseModel.hpp"
 
+#include <AgentData.hpp>
 #include <SetupType.hpp>
 #include <settings/CalibrationSettings.hpp>
 #include <settings/CommandLineParameters.hpp>
@@ -34,6 +35,8 @@ namespace Fishmodel {
         _timer.clear();
         _timestep = 0;
         _time = 0;
+
+        _to_be_optimized = true;
 
         _config.trajectory.teb_autosize = false;
         _config.trajectory.dt_ref = 0.3;
@@ -215,6 +218,9 @@ namespace Fishmodel {
         _kick_duration = 1; // [s]
         tau0 = 0.8; // [s]
 
+        // Find neighboring robots
+        findNeighbors();
+
         // Determine current pose and velocity
         elastic_band::PoseSE2 pose;
         elastic_band::Velocity velocity;
@@ -251,17 +257,43 @@ namespace Fishmodel {
 
                 // Send control commands
                 // (not to be done here)
-            } else {
+            } else if (_to_be_optimized) {
                 qDebug() << "The TEB planner was not able to find a feasible solution for the trajectory.";
             }
-        } else {
+        } else if (_to_be_optimized) {
             qDebug() << "The TEB planner was not able to find an optimized solution for the trajectory.";
         }
 
         // Update position and velocity information (actual move step)
         move();
 
+        // Reset status flag
         _is_kicking = false;
+    }
+
+    void ToulouseModel::findNeighbors()
+    {
+        _neighbors.clear();
+        if (_to_be_optimized && _robot != nullptr) {
+            const double neighboring_radius = radius;
+            for (AgentDataWorld robot : _robot->otherRobotsData()) {
+                if (robot.type() == AgentType::CASU) {
+                    if (_robot->state().position().closeTo(robot.state().position(), neighboring_radius)) {
+                        QString id = robot.id();
+                        ToulouseModel* behavior = nullptr;
+                        for (std::vector<AgentBehavior_t>::const_iterator robot = _simulation.robots.begin(); robot != _simulation.robots.end(); ++robot) {
+                            if (reinterpret_cast<ToulouseModel*>(robot->second)->robot()->id() == id) {
+                                behavior = reinterpret_cast<ToulouseModel*>(robot->second);
+                                break;
+                            }
+                        }
+                        if (behavior != nullptr) {
+                            _neighbors.append(behavior);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     void ToulouseModel::determineState(elastic_band::PoseSE2& pose, elastic_band::Velocity& velocity, elastic_band::Timestamp& timestamp)
@@ -422,26 +454,60 @@ namespace Fishmodel {
         // _viapoints.clear();
         // _obstacles.clear();
         // _obstacles.push_back(elastic_band::ObstaclePtr(new elastic_band::CircularObstacle(ARENA_CENTER.first, ARENA_CENTER.second, radius)));
-        _planner->initialize(_config, &_obstacles, _robot_model, _visualization, &_viapoints);
+        if (_to_be_optimized) {
+            _planner->initialize(_config, &_obstacles, _robot_model, _visualization, &_viapoints);
+        }
+        _planner->setVelocityStart(_trajectory_ref->trajectory().front()->velocity(), false);
+        _planner->setVelocityGoal (_trajectory_ref->trajectory().at(_trajectory_ref->trajectory().size()-2)->velocity(), false);
     }
 
     void ToulouseModel::optimizeTrajectory()
     {
-        _planner->setVelocityStart(_trajectory_ref->trajectory().front()->velocity(), false);
-        _planner->setVelocityGoal (_trajectory_ref->trajectory().at(_trajectory_ref->trajectory().size()-2)->velocity(), false);
-        // TODO: limited overall computation time availabe to return a resulting trajectory
-        // TODO: agent interdependency graph optimization
-        _planner->plan(*_trajectory_ref, true);
+        if (!_to_be_optimized) {
+            return;
+        }
+        // TODO: limited overall computation time available to return a resulting trajectory
+        if (_neighbors.isEmpty()) {
+            _planner->plan(*_trajectory_ref, true);
+        } else {
+            _trajectories.clear();
+            _trajectories.push_back(_trajectory_ref);
+            for (ToulouseModel* robot : _neighbors) {
+                robot->to_be_optimized() = false;
+                robot->step();
+                _trajectories.push_back(robot->referenceTrajectory());
+            }
+            _planner->plan(_trajectories, true);
+            _trajectories.clear();
+        }
     }
 
     void ToulouseModel::fetchTrajectory()
     {
+        if (!_to_be_optimized) {
+            return;
+        }
         _trajectory_opt->robotParameters() = _trajectory_ref->robotParameters();
-        _planner->getFullTrajectory(*_trajectory_opt);
+        if (_neighbors.isEmpty()) {
+            _planner->getFullTrajectory(*_trajectory_opt);
+        } else {
+            _trajectories.clear();
+            _trajectories.push_back(_trajectory_opt);
+            for (ToulouseModel* robot : _neighbors) {
+                robot->optimizedTrajectory()->robotParameters() = robot->referenceTrajectory()->robotParameters();
+                _trajectories.push_back(robot->optimizedTrajectory());
+                robot->move(); // FIXME: to be removed if the optimized trajectory is not needed to update the agent state
+            }
+            _planner->getFullTrajectory(_trajectories);
+            _trajectories.clear();
+        }
     }
 
     void ToulouseModel::computePerformance()
     {
+        if (!_to_be_optimized) {
+            return;
+        }
         _planner->computeCurrentCost(&(*_trajectory_ref));
         const double optim_cost = _planner->getCurrentCost();
         qDebug() << "Cost of the last optimization process =" << optim_cost;
@@ -449,12 +515,18 @@ namespace Fishmodel {
 
     bool ToulouseModel::isTrajectoryOptimized()
     {
+        if (!_to_be_optimized) {
+            return false;
+        }
         const bool optimized = _planner->isOptimized();
         return optimized;
     }
 
     bool ToulouseModel::isTrajectoryFeasible()
     {
+        if (!_to_be_optimized) {
+            return false;
+        }
         // TODO: CHECK TRAJECTORY FEASABILITY!
         const bool feasible = true;
         return feasible;
@@ -781,10 +853,19 @@ namespace Fishmodel {
     bool& ToulouseModel::is_kicking() { return _is_kicking; }
     bool ToulouseModel::is_kicking() const { return _is_kicking; }
 
+    bool& ToulouseModel::to_be_optimized() { return _to_be_optimized; }
+    bool ToulouseModel::to_be_optimized() const { return _to_be_optimized; }
+
     int ToulouseModel::id() const { return _id; }
     int& ToulouseModel::id() { return _id; }
 
     FishBot* ToulouseModel::robot() const { return _robot; }
     FishBot*& ToulouseModel::robot() { return _robot; }
+
+    elastic_band::TrajectoryPtr ToulouseModel::referenceTrajectory() const { return _trajectory_ref; }
+    elastic_band::TrajectoryPtr& ToulouseModel::referenceTrajectory() { return _trajectory_ref; }
+
+    elastic_band::TrajectoryPtr ToulouseModel::optimizedTrajectory() const { return _trajectory_opt; }
+    elastic_band::TrajectoryPtr& ToulouseModel::optimizedTrajectory() { return _trajectory_opt; }
 
 } // namespace Fishmodel

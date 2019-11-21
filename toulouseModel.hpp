@@ -82,11 +82,19 @@ namespace Fishmodel {
         bool is_kicking() const;
         bool& is_kicking();
 
+        bool to_be_optimized() const;
+        bool& to_be_optimized();
+
         int id() const;
         int& id();
 
         FishBot* robot() const;
         FishBot*& robot();
+
+        elastic_band::TrajectoryPtr referenceTrajectory() const;
+        elastic_band::TrajectoryPtr& referenceTrajectory();
+        elastic_band::TrajectoryPtr optimizedTrajectory() const;
+        elastic_band::TrajectoryPtr& optimizedTrajectory();
 
         double radius;
 
@@ -103,6 +111,7 @@ namespace Fishmodel {
         double time_coef;
 
     protected:
+        void findNeighbors();
         void determineState(elastic_band::PoseSE2& pose, elastic_band::Velocity& velocity, elastic_band::Timestamp& timestamp);
         void planTrajectory(elastic_band::PoseSE2& pose, elastic_band::Velocity& velocity, elastic_band::Timestamp& timestamp);
         void initializePlanner();
@@ -147,21 +156,27 @@ namespace Fishmodel {
         double _time;
         Timer _timer;
 
+        bool _to_be_optimized;
+
         int _id;
 
-        // Pointer to the robot that is potentially controlled by this model
+        // Robot controlled by this model
         FishBot* _robot = nullptr;
 
+        // List of neighboring robots
+        QList<ToulouseModel*> _neighbors;
+
         // Timed Elastic Band
-        elastic_band::TebConfig              _config;
-        elastic_band::TebPlannerPtr          _planner;
-        elastic_band::TebVisualizationPtr    _visualization;
-        elastic_band::RobotFootprintModelPtr _robot_model;
-        elastic_band::Point2dContainer       _robot_shape;
-        elastic_band::ViaPointContainer      _viapoints;
-        elastic_band::ObstacleContainer      _obstacles;
-        elastic_band::TrajectoryPtr          _trajectory_ref;
-        elastic_band::TrajectoryPtr          _trajectory_opt;
+        elastic_band::TebConfig                  _config;
+        elastic_band::TebPlannerPtr              _planner;
+        elastic_band::TebVisualizationPtr        _visualization;
+        elastic_band::RobotFootprintModelPtr     _robot_model;
+        elastic_band::Point2dContainer           _robot_shape;
+        elastic_band::ViaPointContainer          _viapoints;
+        elastic_band::ObstacleContainer          _obstacles;
+        elastic_band::TrajectoryPtr              _trajectory_ref;
+        elastic_band::TrajectoryPtr              _trajectory_opt;
+        std::vector<elastic_band::TrajectoryPtr> _trajectories;
         QMainWindow* _plot_pth_ref = new QMainWindow();
         QMainWindow* _plot_pth_opt = new QMainWindow();
         QMainWindow* _plot_pos_ref = new QMainWindow();
@@ -173,6 +188,7 @@ namespace Fishmodel {
         QMainWindow* _plot_acc_ref = new QMainWindow();
         QMainWindow* _plot_acc_opt = new QMainWindow();
 
+        // Arena coordinates
         CoordinatesConversionPtr _coordinatesConversion;
         const Coord_t ARENA_CENTER;
     };
