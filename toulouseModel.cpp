@@ -339,11 +339,11 @@ namespace Fishmodel {
     void ToulouseModel::planTrajectory(elastic_band::PoseSE2& pose, elastic_band::Velocity& velocity, elastic_band::Timestamp& timestamp)
     {
         const double timestep = 0.005; // [s]
-        const double horizon = std::min(_kick_duration - timestamp.count(), 15 * timestep); // [s]
+        const double horizon_control_loop = 15 * timestep; // [s]
+        const double horizon_optimization = 15 * timestep; // [s]
+        const double horizon_modelization = _kick_duration - timestamp.count(); // [s]
+        const double horizon = std::max(std::min(horizon_modelization, horizon_optimization), horizon_control_loop); // [s]
         const size_t nb_commands = static_cast<size_t>(std::max(std::floor(horizon / timestep), 1.)); // [#]
-        qDebug() << "<<<<<<<<<<<<<<<<<<<<<<< timestep = " << timestep;
-        qDebug() << "<<<<<<<<<<<<<<<<<<<<<<< horizon = " << horizon;
-        qDebug() << "<<<<<<<<<<<<<<<<<<<<<<< nb_commands = " << nb_commands;
 
         elastic_band::TimestepPtr       timestep_ptr(new elastic_band::Timestep(elastic_band::timestep_t(timestep)));
         elastic_band::TimestepContainer timestep_profile(nb_commands - 1, timestep_ptr);
@@ -558,8 +558,9 @@ namespace Fishmodel {
         QList<double> speeds;
         elastic_band::VelocityContainer velocity_profile;
         _trajectory_opt->getProfileVelocity(velocity_profile);
-        speeds.reserve(static_cast<int>(2 * velocity_profile.size()));
-        for (size_t i = 0; i < velocity_profile.size(); ++i) {
+        const size_t horizon = std::min(velocity_profile.size(), static_cast<size_t>(15));
+        speeds.reserve(static_cast<int>(2 * horizon));
+        for (size_t i = 0; i < horizon; ++i) {
             // Convert speeds from [rad/s] to [cm/s]
             velocity_profile.at(i)->wheel() *= velocity_profile.at(i)->getRadius() * 100.;
             speeds.append(velocity_profile.at(i)->wheel()[0]);
