@@ -56,8 +56,8 @@ namespace Fishmodel {
         void interact();
         virtual void move();
 
-        void stepper();
         std::tuple<double, double> model_stepper(double radius) const;
+        void stepper();
         void free_will(const_state_t state, const std::tuple<double, double>& model_out, const std::vector<int>& idcs);
 
         Position<double> position() const;
@@ -65,23 +65,24 @@ namespace Fishmodel {
         double orientation() const;
         double& orientation();
 
-        double time_kicker() const;
-
         double time() const;
         double& time();
 
+        double time_kicker() const;
+
         double angular_direction() const;
         double& angular_direction();
-        double kick_duration() const;
-        double& kick_duration();
-        double kick_length() const;
-        double& kick_length();
         double peak_velocity() const;
         double& peak_velocity();
+        double kick_length() const;
+        double& kick_length();
+        double kick_duration() const;
+        double& kick_duration();
 
         bool is_kicking() const;
         bool& is_kicking();
-
+        bool has_stepped() const;
+        bool& has_stepped();
         bool to_be_optimized() const;
         bool& to_be_optimized();
 
@@ -123,6 +124,9 @@ namespace Fishmodel {
         void visualizeReferenceTrajectory();
         void visualizeOptimizedTrajectory();
 
+        state_t compute_state() const;
+        std::vector<int> sort_neighbours(const Eigen::VectorXd& values, const int kicker_idx, Order order = Order::INCREASING) const;
+
         double wall_distance_interaction(double gamma_wall, double wall_interaction_range, double ag_radius, double radius) const;
         double wall_angle_interaction(double theta) const;
 
@@ -134,9 +138,6 @@ namespace Fishmodel {
         double alignment_perception_attractor(double perception) const;
         double alignment_angle_attractor(double phi) const;
 
-        state_t compute_state() const;
-        std::vector<int> sort_neighbours(const Eigen::VectorXd& values, const int kicker_idx, Order order = Order::INCREASING) const;
-
         double angle_to_pipi(double difference) const;
 
         Position<double> _desired_position;
@@ -145,18 +146,18 @@ namespace Fishmodel {
         Speed<double> _speed;
         double _orientation;
 
-        bool _is_kicking;
-
         double _angular_direction;
         double _peak_velocity;
         double _kick_length;
         double _kick_duration;
 
+        bool _is_kicking;
+        bool _has_stepped;
+        bool _to_be_optimized;
+
         double _timestep;
         double _time;
         Timer _timer;
-
-        bool _to_be_optimized;
 
         int _id;
 

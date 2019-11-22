@@ -36,6 +36,8 @@ namespace Fishmodel {
         _timestep = 0;
         _time = 0;
 
+        _is_kicking = true;
+        _has_stepped = false;
         _to_be_optimized = true;
 
         _config.trajectory.teb_autosize = false;
@@ -158,14 +160,20 @@ namespace Fishmodel {
             perceived_agents = _simulation.agents.size() - 1;
         }
 
-        stepper();
         _position.x = -(_id - 1. - _simulation.agents.size() / 2) * body_length;
         _position.y = -0.1;
-        _angular_direction = _id * 2. * M_PI / (_simulation.agents.size() + 1);
+        _orientation = _id * 2. * M_PI / (_simulation.agents.size() + 1);
+        _angular_direction = angle_to_pipi(_orientation);
+
+        stepper();
     }
 
     void ToulouseModel::step()
     {
+        // Stop the process if the agent has already stepped
+        if (_has_stepped)
+            return;
+
         // Stop the process if the agent is not a robot
         std::pair<Agent*, Behavior*> current_agent(_agent, this);
         auto result = std::find(_simulation.robots.begin(), _simulation.robots.end(), current_agent);
@@ -264,24 +272,25 @@ namespace Fishmodel {
             qDebug() << "The TEB planner was not able to find an optimized solution for the trajectory.";
         }
 
-        // Update position and velocity information (actual move step)
-        move();
+        if (_to_be_optimized) {
+            // Update position and velocity information (actual move step)
+            move();
+        }
 
-        // Reset status flag
+        // Update status flags
         _is_kicking = false;
+        _has_stepped = true;
     }
 
     void ToulouseModel::findNeighbors()
     {
         _neighbors.clear();
-        if (!_to_be_optimized || _robot == nullptr) {
+        if (!_to_be_optimized || _robot == nullptr)
             return;
-        }
         const double neighboring_radius = 2 * radius;
         for (AgentDataWorld robot : _robot->otherRobotsData()) {
-            if (robot.type() != AgentType::CASU) {
+            if (robot.type() != AgentType::CASU)
                 continue;
-            }
             if (_robot->state().position().closeTo(robot.state().position(), neighboring_radius)) {
                 QString id = robot.id();
                 ToulouseModel* behavior = nullptr;
@@ -291,9 +300,8 @@ namespace Fishmodel {
                         break;
                     }
                 }
-                if (behavior != nullptr) {
+                if (behavior != nullptr)
                     _neighbors.append(behavior);
-                }
             }
         }
     }
@@ -317,9 +325,8 @@ namespace Fishmodel {
                     distance = dist;
                     idx = i;
                 }
-                if (distance < accuracy) {
+                if (distance < accuracy)
                     break;
-                }
             }
             qDebug() << "<<<<<<<<<<<<<<<<<<<<<<< index current position =" << idx;
         }
@@ -380,8 +387,6 @@ namespace Fishmodel {
         double error_dif = 0;
         double error_sum = 0;
 
-        _angular_direction = angle_to_pipi(_angular_direction);
-
         // Implement burst-and-coast swimming
         pose_profile.front() = elastic_band::PoseSE2Ptr(new elastic_band::PoseSE2(_position.x, _position.y, _orientation));
         for (size_t i = 1; i < pose_profile.size(); ++i) {
@@ -393,26 +398,18 @@ namespace Fishmodel {
                 error_new = angle_to_pipi(_angular_direction - theta);
                 error_dif = 0;
                 error_sum = 0;
-                if (errors.size() > 0) {
+                if (errors.size() > 0)
                     error_dif = error_new - error_old;
-                }
                 if (rotation > -_config.robot.max_vel_theta && rotation < _config.robot.max_vel_theta) {
                     errors.enqueue(error_new);
-                    for (double error : errors) {
+                    for (double error : errors)
                         error_sum += error;
-                    }
                 }
-                if (duration_phase1 > timestep) {
-                    rotation = Kp * error_new + Ki * error_sum * timestep + Kd * error_dif / timestep;
-                } else {
-                    rotation = rotation_init;
-                }
-                if (rotation < -_config.robot.max_vel_theta) {
+                rotation = duration_phase1 > timestep ? Kp * error_new + Ki * error_sum * timestep + Kd * error_dif / timestep : rotation_init;
+                if (rotation < -_config.robot.max_vel_theta)
                     rotation = -_config.robot.max_vel_theta;
-                }
-                if (rotation > _config.robot.max_vel_theta) {
-                    rotation = _config.robot.max_vel_theta;
-                }
+                if (rotation > +_config.robot.max_vel_theta)
+                    rotation = +_config.robot.max_vel_theta;
                 error_old = error_new;
                 double dtheta = 0;
                 if (std::abs(rotation) > 1e-6) {
@@ -457,18 +454,16 @@ namespace Fishmodel {
         // _viapoints.clear();
         // _obstacles.clear();
         // _obstacles.push_back(elastic_band::ObstaclePtr(new elastic_band::CircularObstacle(ARENA_CENTER.first, ARENA_CENTER.second, radius)));
-        if (_to_be_optimized) {
+        if (_to_be_optimized)
             _planner->initialize(_config, &_obstacles, _robot_model, _visualization, &_viapoints);
-        }
         _planner->setVelocityStart(_trajectory_ref->trajectory().front()->velocity(), false);
         _planner->setVelocityGoal (_trajectory_ref->trajectory().at(_trajectory_ref->trajectory().size()-2)->velocity(), false);
     }
 
     void ToulouseModel::optimizeTrajectory()
     {
-        if (!_to_be_optimized) {
+        if (!_to_be_optimized)
             return;
-        }
         // TODO: limited overall computation time available to return a resulting trajectory
         if (_neighbors.isEmpty()) {
             _planner->plan(*_trajectory_ref, true);
@@ -487,9 +482,8 @@ namespace Fishmodel {
 
     void ToulouseModel::fetchTrajectory()
     {
-        if (!_to_be_optimized) {
+        if (!_to_be_optimized)
             return;
-        }
         _trajectory_opt->robotParameters() = _trajectory_ref->robotParameters();
         if (_neighbors.isEmpty()) {
             _planner->getFullTrajectory(*_trajectory_opt);
@@ -499,7 +493,7 @@ namespace Fishmodel {
             for (ToulouseModel* robot : _neighbors) {
                 robot->optimizedTrajectory()->robotParameters() = robot->referenceTrajectory()->robotParameters();
                 _trajectories.push_back(robot->optimizedTrajectory());
-                robot->move(); // FIXME: to be removed if the optimized trajectory is not needed to update the agent state
+                robot->move();
             }
             _planner->getFullTrajectory(_trajectories);
             _trajectories.clear();
@@ -508,9 +502,8 @@ namespace Fishmodel {
 
     void ToulouseModel::computePerformance()
     {
-        if (!_to_be_optimized) {
+        if (!_to_be_optimized)
             return;
-        }
         _planner->computeCurrentCost(&(*_trajectory_ref));
         const double optim_cost = _planner->getCurrentCost();
         qDebug() << "Cost of the last optimization process =" << optim_cost;
@@ -518,18 +511,16 @@ namespace Fishmodel {
 
     bool ToulouseModel::isTrajectoryOptimized()
     {
-        if (!_to_be_optimized) {
+        if (!_to_be_optimized)
             return false;
-        }
         const bool optimized = _planner->isOptimized();
         return optimized;
     }
 
     bool ToulouseModel::isTrajectoryFeasible()
     {
-        if (!_to_be_optimized) {
+        if (!_to_be_optimized)
             return false;
-        }
         // TODO: CHECK TRAJECTORY FEASABILITY!
         const bool feasible = true;
         return feasible;
@@ -571,7 +562,6 @@ namespace Fishmodel {
 
     void ToulouseModel::stimulate()
     {
-        // TODO: kick length is not initialized the first time!
         _desired_position.x = _position.x + _kick_length * std::cos(_angular_direction);
         _desired_position.y = _position.y + _kick_length * std::sin(_angular_direction);
 
@@ -709,6 +699,15 @@ namespace Fishmodel {
         return neigh_idcs;
     }
 
+    std::tuple<double, double> ToulouseModel::model_stepper(double radius) const
+    {
+        double r = std::sqrt(std::pow(_desired_position.x, 2) + std::pow(_desired_position.y, 2));
+        double rw = radius - r;
+        double theta = std::atan2(_desired_position.y, _desired_position.x);
+        double thetaW = angle_to_pipi(_angular_direction - theta);
+        return std::tuple<double, double>{rw, thetaW};
+    }
+
     void ToulouseModel::stepper()
     {
         double bb;
@@ -725,8 +724,7 @@ namespace Fishmodel {
         _kick_length = _peak_velocity * tau0 * (1. - std::exp(-_kick_duration / tau0));
     }
 
-    void ToulouseModel::free_will(const_state_t state, const std::tuple<double, double>& model_out,
-        const std::vector<int>& idcs)
+    void ToulouseModel::free_will(const_state_t state, const std::tuple<double, double>& model_out, const std::vector<int>& idcs)
     {
         double r_w, theta_w;
         Eigen::VectorXd distances, perception, thetas, phis;
@@ -734,16 +732,13 @@ namespace Fishmodel {
         std::tie(distances, perception, thetas, phis) = state;
 
         double g = std::sqrt(-2. * std::log(tools::random_in_range(0., 1.) + 1.0e-16))
-            * std::sin(2. * M_PI * tools::random_in_range(0., 1.));
+                 * std::sin(2. * M_PI * tools::random_in_range(0., 1.));
 
-        double q = 1. * alpha
-            * wall_distance_interaction(gamma_wall, wall_interaction_range, r_w, radius)
-            / gamma_wall;
+        double q = alpha * wall_distance_interaction(gamma_wall, wall_interaction_range, r_w, radius) / gamma_wall;
 
         double dphi_rand = gamma_rand * (1. - q) * g;
-        double dphi_wall
-            = wall_distance_interaction(gamma_wall, wall_interaction_range, r_w, radius)
-            * wall_angle_interaction(theta_w);
+        double dphi_wall = wall_distance_interaction(gamma_wall, wall_interaction_range, r_w, radius)
+                         * wall_angle_interaction(theta_w);
 
         double dphi_attraction = 0;
         double dphi_ali = 0;
@@ -751,24 +746,17 @@ namespace Fishmodel {
             for (int i = 0; i < perceived_agents; ++i) {
                 int fidx = idcs[i];
                 dphi_attraction += wall_distance_attractor(distances(fidx), radius)
-                    * wall_perception_attractor(perception(fidx)) * wall_angle_attractor(phis(fidx));
+                                 * wall_perception_attractor(perception(fidx))
+                                 * wall_angle_attractor(phis(fidx));
                 dphi_ali += alignment_distance_attractor(distances(fidx), radius)
-                    * alignment_perception_attractor(perception(fidx))
-                    * alignment_angle_attractor(phis(fidx));
+                          * alignment_perception_attractor(perception(fidx))
+                          * alignment_angle_attractor(phis(fidx));
             }
         }
 
+        // TODO: update angular direction before stimulating the agent
         double dphi = dphi_rand + dphi_wall + dphi_attraction + dphi_ali;
         _angular_direction = angle_to_pipi(_angular_direction + dphi);
-    }
-
-    std::tuple<double, double> ToulouseModel::model_stepper(double radius) const
-    {
-        double r = std::sqrt(std::pow(_desired_position.x, 2) + std::pow(_desired_position.y, 2));
-        double rw = radius - r;
-        double theta = std::atan2(_desired_position.y, _desired_position.x);
-        double thetaW = angle_to_pipi(_angular_direction - theta);
-        return std::tuple<double, double>{rw, thetaW};
     }
 
     double ToulouseModel::wall_distance_interaction(
@@ -837,10 +825,10 @@ namespace Fishmodel {
     double ToulouseModel::orientation() const { return _orientation; }
     double& ToulouseModel::orientation() { return _orientation; }
 
-    double ToulouseModel::time_kicker() const { return _time + _kick_duration; }
-
     double ToulouseModel::time() const { return _time; }
     double& ToulouseModel::time() { return _time; }
+
+    double ToulouseModel::time_kicker() const { return _time + _kick_duration; }
 
     double ToulouseModel::angular_direction() const { return _angular_direction; }
     double& ToulouseModel::angular_direction() { return _angular_direction; }
@@ -856,6 +844,9 @@ namespace Fishmodel {
 
     bool& ToulouseModel::is_kicking() { return _is_kicking; }
     bool ToulouseModel::is_kicking() const { return _is_kicking; }
+
+    bool& ToulouseModel::has_stepped() { return _has_stepped; }
+    bool ToulouseModel::has_stepped() const { return _has_stepped; }
 
     bool& ToulouseModel::to_be_optimized() { return _to_be_optimized; }
     bool ToulouseModel::to_be_optimized() const { return _to_be_optimized; }
