@@ -285,7 +285,8 @@ namespace Fishmodel {
     void ToulouseModel::findNeighbors()
     {
         _neighbors.clear();
-        if (!_to_be_optimized || _robot == nullptr)
+        const bool multi_agent_optimization = true;
+        if (!_to_be_optimized || !multi_agent_optimization || _robot == nullptr)
             return;
         const double neighboring_radius = 2 * radius;
         for (AgentDataWorld robot : _robot->otherRobotsData()) {
