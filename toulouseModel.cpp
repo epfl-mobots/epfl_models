@@ -232,10 +232,10 @@ namespace Fishmodel {
 
         // Compute reference trajectory
         planTrajectory(pose, velocity, timestamp);
-        std::cout << *_trajectory_ref << std::endl;
+        //std::cout << *_trajectory_ref << std::endl;
 
         // Visualize reference trajectory
-        visualizeReferenceTrajectory();
+        //visualizeReferenceTrajectory();
 
         // Initialize environment
         initializePlanner();
@@ -247,13 +247,13 @@ namespace Fishmodel {
             if (isTrajectoryFeasible()) {
                 // Store optimized trajectory
                 fetchTrajectory();
-                std::cout << *_trajectory_opt << std::endl;
+                //std::cout << *_trajectory_opt << std::endl;
 
                 // Compute optimization performance
-                computePerformance();
+                //computePerformance();
 
                 // Visualize optimized trajectory
-                visualizeOptimizedTrajectory();
+                //visualizeOptimizedTrajectory();
 
                 // Send control commands
                 // (not to be done here)
