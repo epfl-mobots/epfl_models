@@ -274,23 +274,25 @@ namespace Fishmodel {
     void ToulouseModel::findNeighbors()
     {
         _neighbors.clear();
-        if (_to_be_optimized && _robot != nullptr) {
-            const double neighboring_radius = radius;
-            for (AgentDataWorld robot : _robot->otherRobotsData()) {
-                if (robot.type() == AgentType::CASU) {
-                    if (_robot->state().position().closeTo(robot.state().position(), neighboring_radius)) {
-                        QString id = robot.id();
-                        ToulouseModel* behavior = nullptr;
-                        for (std::vector<AgentBehavior_t>::const_iterator robot = _simulation.robots.begin(); robot != _simulation.robots.end(); ++robot) {
-                            if (reinterpret_cast<ToulouseModel*>(robot->second)->robot()->id() == id) {
-                                behavior = reinterpret_cast<ToulouseModel*>(robot->second);
-                                break;
-                            }
-                        }
-                        if (behavior != nullptr) {
-                            _neighbors.append(behavior);
-                        }
+        if (!_to_be_optimized || _robot == nullptr) {
+            return;
+        }
+        const double neighboring_radius = 2 * radius;
+        for (AgentDataWorld robot : _robot->otherRobotsData()) {
+            if (robot.type() != AgentType::CASU) {
+                continue;
+            }
+            if (_robot->state().position().closeTo(robot.state().position(), neighboring_radius)) {
+                QString id = robot.id();
+                ToulouseModel* behavior = nullptr;
+                for (std::vector<AgentBehavior_t>::const_iterator robot = _simulation.robots.begin(); robot != _simulation.robots.end(); ++robot) {
+                    if (reinterpret_cast<ToulouseModel*>(robot->second)->robot()->id() == id) {
+                        behavior = reinterpret_cast<ToulouseModel*>(robot->second);
+                        break;
                     }
+                }
+                if (behavior != nullptr) {
+                    _neighbors.append(behavior);
                 }
             }
         }
@@ -380,6 +382,7 @@ namespace Fishmodel {
 
         _angular_direction = angle_to_pipi(_angular_direction);
 
+        // Implement burst-and-coast swimming
         pose_profile.front() = elastic_band::PoseSE2Ptr(new elastic_band::PoseSE2(_position.x, _position.y, _orientation));
         for (size_t i = 1; i < pose_profile.size(); ++i) {
             duration = i * timestep + duration_init;
