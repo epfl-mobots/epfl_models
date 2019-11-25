@@ -361,7 +361,7 @@ namespace Fishmodel {
         elastic_band::TimestepContainer timestep_profile(nb_commands - 1, timestep_ptr);
         elastic_band:: PoseSE2Container     pose_profile(nb_commands);
 
-        const double acceleration = _config.robot.acc_lim_x; // [m/s^2]
+        const double acceleration = _config.robot.acc_lim_x - _config.optim.penalty_epsilon; // [m/s^2]
 
         const Eigen::Vector2d position_init = pose.position();        // [m]
         const double       orientation_init = pose.orientation();     // [rad]
