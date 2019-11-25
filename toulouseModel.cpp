@@ -301,8 +301,9 @@ namespace Fishmodel {
                         break;
                     }
                 }
-                if (behavior != nullptr)
-                    _neighbors.append(behavior);
+                if (behavior == nullptr || behavior->has_stepped())
+                    continue;
+                _neighbors.append(behavior);
             }
         }
     }
