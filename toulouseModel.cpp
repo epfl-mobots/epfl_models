@@ -311,6 +311,9 @@ namespace Fishmodel {
     {
         int idx = -1;
         if (_trajectory_opt->trajectory().size() > 0 && _timestep > 0) {
+            // Set last velocity equal to antepenultimate velocity if it exists
+            if (_trajectory_opt->trajectory().size() > 1)
+                _trajectory_opt->trajectory().back()->velocity() = _trajectory_opt->trajectory().at(_trajectory_opt->trajectory().size()-2)->velocity();
             // Find the trajectory index corresponding to the current position
             const int timestep = _time / _timestep;
             const int window = 30;
