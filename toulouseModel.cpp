@@ -88,6 +88,7 @@ namespace Fishmodel {
         _config.optim.no_inner_iterations = 5;
         _config.optim.no_outer_iterations = 4;
         _config.optim.stop_below_percentage_improvement = 1;
+        _config.optim.stop_after_elapsed_time_microsecs = 1000000;
         _config.optim.optimization_activate = true;
         _config.optim.optimization_verbose = true;
         _config.optim.penalty_epsilon = 0.001;
@@ -469,7 +470,6 @@ namespace Fishmodel {
     {
         if (!_to_be_optimized)
             return;
-        // TODO: limited overall computation time available to return a resulting trajectory
         if (_neighbors.isEmpty()) {
             _planner->plan(*_trajectory_ref, true);
         } else {
