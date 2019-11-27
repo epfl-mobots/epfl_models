@@ -183,8 +183,8 @@ namespace Fishmodel {
 
         // Update the robot position as tracked by the camera and set it w.r.t. the arena center
         if (_robot != nullptr) {
-            _position.x = _robot->state().position().x();// - ARENA_CENTER.first;
-            _position.y = _robot->state().position().y();// - ARENA_CENTER.second;
+            _position.x = _robot->state().position().x() - ARENA_CENTER.first;
+            _position.y = _robot->state().position().y() - ARENA_CENTER.second;
             _orientation = angle_to_pipi(_robot->state().orientation().angleRad());
         } else {
             _position.x = _agent->headPos.first  - ARENA_CENTER.first;
