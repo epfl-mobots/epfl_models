@@ -451,7 +451,7 @@ namespace Fishmodel {
 
         _trajectory_ref->robotParameters().wheel_radius = 0.005; // [m]
         _trajectory_ref->robotParameters().wheel_distance = 0.018; // [m]
-        _trajectory_ref->setProfileTimestep(timestep_profile, false);
+        _trajectory_ref->setProfileTimestep(timestep_profile, timestamp, false);
         _trajectory_ref->setProfilePose(pose_profile);
     }
 
@@ -460,10 +460,19 @@ namespace Fishmodel {
         // _viapoints.clear();
         // _obstacles.clear();
         // _obstacles.push_back(elastic_band::ObstaclePtr(new elastic_band::CircularObstacle(ARENA_CENTER.first, ARENA_CENTER.second, radius)));
+
         if (_to_be_optimized)
             _planner->initialize(_config, &_obstacles, _robot_model, _visualization, &_viapoints);
-        _planner->setVelocityStart(_trajectory_ref->trajectory().front()->velocity(), false);
-        _planner->setVelocityGoal (_trajectory_ref->trajectory().at(_trajectory_ref->trajectory().size()-2)->velocity(), false);
+
+        if (_trajectory_ref->trajectory().size() > 0)
+            _planner->setVelocityStart(_trajectory_ref->trajectory().front()->velocity(), false);
+        else
+            _planner->setVelocityStart(elastic_band::Velocity(), false);
+
+        if (_trajectory_ref->trajectory().size() > 1)
+            _planner->setVelocityGoal(_trajectory_ref->trajectory().at(_trajectory_ref->trajectory().size()-2)->velocity(), false);
+        else
+            _planner->setVelocityGoal(elastic_band::Velocity(), false);
     }
 
     void ToulouseModel::optimizeTrajectory()
@@ -473,15 +482,14 @@ namespace Fishmodel {
         if (_neighbors.isEmpty()) {
             _planner->plan(*_trajectory_ref, true);
         } else {
-            _trajectories.clear();
-            _trajectories.push_back(_trajectory_ref);
+            std::vector<elastic_band::TrajectoryPtr> trajectories;
+            trajectories.push_back(_trajectory_ref);
             for (ToulouseModel* robot : _neighbors) {
                 robot->to_be_optimized() = false;
                 robot->step();
-                _trajectories.push_back(robot->referenceTrajectory());
+                trajectories.push_back(robot->referenceTrajectory());
             }
-            _planner->plan(_trajectories, true);
-            _trajectories.clear();
+            _planner->plan(trajectories, true);
         }
     }
 
@@ -491,17 +499,24 @@ namespace Fishmodel {
             return;
         _trajectory_opt->robotParameters() = _trajectory_ref->robotParameters();
         if (_neighbors.isEmpty()) {
-            _planner->getFullTrajectory(*_trajectory_opt);
+            _planner->getFullTrajectory(*_trajectory_opt, ! _trajectory_ref->trajectory().empty()
+                                                          ? _trajectory_ref->trajectory().front()->timestamp()
+                                                          : elastic_band::Timestamp::zero());
         } else {
-            _trajectories.clear();
-            _trajectories.push_back(_trajectory_opt);
+            std::vector<elastic_band::TrajectoryPtr> trajectories;
+            std::vector<elastic_band::Timestamp> timestamps;
+            trajectories.push_back(_trajectory_opt);
             for (ToulouseModel* robot : _neighbors) {
                 robot->optimizedTrajectory()->robotParameters() = robot->referenceTrajectory()->robotParameters();
-                _trajectories.push_back(robot->optimizedTrajectory());
+                trajectories.push_back(robot->optimizedTrajectory());
+                timestamps.push_back(! robot->referenceTrajectory()->trajectory().empty()
+                                     ? robot->referenceTrajectory()->trajectory().front()->timestamp()
+                                     : elastic_band::Timestamp::zero());
+            }
+            _planner->getFullTrajectory(trajectories, timestamps);
+            for (ToulouseModel* robot : _neighbors) {
                 robot->move();
             }
-            _planner->getFullTrajectory(_trajectories);
-            _trajectories.clear();
         }
     }
 

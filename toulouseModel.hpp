@@ -168,16 +168,15 @@ namespace Fishmodel {
         QList<ToulouseModel*> _neighbors;
 
         // Timed Elastic Band
-        elastic_band::TebConfig                  _config;
-        elastic_band::TebPlannerPtr              _planner;
-        elastic_band::TebVisualizationPtr        _visualization;
-        elastic_band::RobotFootprintModelPtr     _robot_model;
-        elastic_band::Point2dContainer           _robot_shape;
-        elastic_band::ViaPointContainer          _viapoints;
-        elastic_band::ObstacleContainer          _obstacles;
-        elastic_band::TrajectoryPtr              _trajectory_ref;
-        elastic_band::TrajectoryPtr              _trajectory_opt;
-        std::vector<elastic_band::TrajectoryPtr> _trajectories;
+        elastic_band::TebConfig              _config;
+        elastic_band::TebPlannerPtr          _planner;
+        elastic_band::TebVisualizationPtr    _visualization;
+        elastic_band::RobotFootprintModelPtr _robot_model;
+        elastic_band::Point2dContainer       _robot_shape;
+        elastic_band::ViaPointContainer      _viapoints;
+        elastic_band::ObstacleContainer      _obstacles;
+        elastic_band::TrajectoryPtr          _trajectory_ref;
+        elastic_band::TrajectoryPtr          _trajectory_opt;
         QMainWindow* _plot_pth_ref = new QMainWindow();
         QMainWindow* _plot_pth_opt = new QMainWindow();
         QMainWindow* _plot_pos_ref = new QMainWindow();
