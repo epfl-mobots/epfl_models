@@ -370,10 +370,10 @@ namespace Fishmodel {
         const double          rotation_init = velocity.rotation();    // [rad/s]
         const double          duration_init = timestamp.count();      // [s]
 
-        double duration = duration_init;
-        double duration_phase1 = duration;
-        double duration_phase2 = duration;
-        double duration_phase3 = duration;
+        static double duration = duration_init;
+        static double duration_phase1 = duration;
+        static double duration_phase2 = duration;
+        static double duration_phase3 = duration;
         double translation = translation_init;
         double rotation = rotation_init;
         Eigen::Vector2d position = position_init;
@@ -430,7 +430,7 @@ namespace Fishmodel {
                 position_phase1 = position;
                 position_phase2 = position_phase1;
                 position_phase3 = position_phase1;
-            } else if (acceleration * (duration - duration_phase1/* + timestep*/) + translation < _peak_velocity) { // 2. Acceleration
+            } else if (acceleration * (duration - duration_phase1) + translation < _peak_velocity && duration_phase2 == duration_phase3) { // 2. Acceleration
                 duration_phase2 = duration - duration_phase1;
                 duration_phase3 = duration_phase2;
                 position = Eigen::Vector2d(std::cos(theta), std::sin(theta)) * (acceleration * duration_phase2 * duration_phase2 / 2 + translation * duration_phase2) + position_phase1;
