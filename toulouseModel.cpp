@@ -222,7 +222,7 @@ namespace Fishmodel {
         }
 
         // FIXME: TEST PURPOSES
-        _angular_direction = 0.2; // [rad]
+        _angular_direction = angle_to_pipi(_orientation + (_is_kicking ? M_PI/2 : 0)); // [rad]
         _peak_velocity = 0.15; // [m/s]
         _kick_duration = 1; // [s]
         tau0 = 0.8; // [s]
