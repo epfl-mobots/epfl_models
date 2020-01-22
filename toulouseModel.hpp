@@ -28,9 +28,6 @@
 
 #include <eigen3/Eigen/Core>
 
-#include <map>
-#include <mutex>
-
 namespace Fishmodel {
 
     using namespace simu;
@@ -45,16 +42,21 @@ namespace Fishmodel {
     class ToulouseModel : public Behavior {
     public:
         ToulouseModel(Simulation& simulation, Agent* agent = nullptr);
+        ~ToulouseModel();
 
         void init();
         virtual void reinit() override;
         virtual void step() override;
 
-        QList<double> getSpeedCommands() const;
+        std::tuple<int, QList<double>> getSpeedCommands() const;
 
+        void logDataPrepare();
+        void logDataFinish();
+        void logDataWrite();
+
+        virtual void move();
         void stimulate();
         void interact();
-        virtual void move();
 
         std::tuple<double, double> model_stepper(double radius) const;
         void stepper();
@@ -62,13 +64,19 @@ namespace Fishmodel {
 
         Position<double> position() const;
         Position<double>& position();
+        Speed<double> speed() const;
+        Speed<double>& speed();
         double orientation() const;
         double& orientation();
 
-        double time() const;
-        double& time();
-
-        double time_kicker() const;
+        bool is_kicking() const;
+        bool& is_kicking();
+        bool is_gliding() const;
+        bool& is_gliding();
+        bool has_stepped() const;
+        bool& has_stepped();
+        bool to_be_optimized() const;
+        bool& to_be_optimized();
 
         double angular_direction() const;
         double& angular_direction();
@@ -79,12 +87,14 @@ namespace Fishmodel {
         double kick_duration() const;
         double& kick_duration();
 
-        bool is_kicking() const;
-        bool& is_kicking();
-        bool has_stepped() const;
-        bool& has_stepped();
-        bool to_be_optimized() const;
-        bool& to_be_optimized();
+        double time_kicker() const;
+
+        double time() const;
+        double& time();
+        double timestep() const;
+        double& timestep();
+        double timestamp() const;
+        double& timestamp();
 
         int id() const;
         int& id();
@@ -96,6 +106,29 @@ namespace Fishmodel {
         elastic_band::TrajectoryPtr& referenceTrajectory();
         elastic_band::TrajectoryPtr optimizedTrajectory() const;
         elastic_band::TrajectoryPtr& optimizedTrajectory();
+        std::shared_ptr<std::vector<size_t>> fixedPoses() const;
+        std::shared_ptr<std::vector<size_t>>& fixedPoses();
+
+        QMainWindow* plotReferencePth() const;
+        QMainWindow*& plotReferencePth();
+        QMainWindow* plotOptimizedPth() const;
+        QMainWindow*& plotOptimizedPth();
+        QMainWindow* plotReferencePos() const;
+        QMainWindow*& plotReferencePos();
+        QMainWindow* plotOptimizedPos() const;
+        QMainWindow*& plotOptimizedPos();
+        QMainWindow* plotReferenceSpd() const;
+        QMainWindow*& plotReferenceSpd();
+        QMainWindow* plotOptimizedSpd() const;
+        QMainWindow*& plotOptimizedSpd();
+        QMainWindow* plotReferenceVel() const;
+        QMainWindow*& plotReferenceVel();
+        QMainWindow* plotOptimizedVel() const;
+        QMainWindow*& plotOptimizedVel();
+        QMainWindow* plotReferenceAcc() const;
+        QMainWindow*& plotReferenceAcc();
+        QMainWindow* plotOptimizedAcc() const;
+        QMainWindow*& plotOptimizedAcc();
 
         double radius;
 
@@ -125,7 +158,7 @@ namespace Fishmodel {
         void visualizeOptimizedTrajectory();
 
         state_t compute_state() const;
-        std::vector<int> sort_neighbours(const Eigen::VectorXd& values, const int kicker_idx, Order order = Order::INCREASING) const;
+        std::vector<int> sort_neighbors(const Eigen::VectorXd& values, const int kicker_idx, Order order = Order::INCREASING) const;
 
         double wall_distance_interaction(double gamma_wall, double wall_interaction_range, double ag_radius, double radius) const;
         double wall_angle_interaction(double theta) const;
@@ -139,6 +172,7 @@ namespace Fishmodel {
         double alignment_angle_attractor(double phi) const;
 
         double angle_to_pipi(double difference) const;
+        double round_time_resolution(double period_sec) const;
 
         Position<double> _desired_position;
         Speed<double> _desired_speed;
@@ -146,22 +180,32 @@ namespace Fishmodel {
         Speed<double> _speed;
         double _orientation;
 
+        bool _is_kicking;
+        bool _is_gliding;
+        bool _has_stepped;
+        bool _to_be_optimized;
+
         double _angular_direction;
         double _peak_velocity;
         double _kick_length;
         double _kick_duration;
 
-        bool _is_kicking;
-        bool _has_stepped;
-        bool _to_be_optimized;
-
-        double _timestep;
-        double _time;
         Timer _timer;
+        double _time;
+        double _timestep;
+        double _timestamp;
 
-        int _id;
+        Timer _timer_loop;
+        Timer _timer_exec;
+        Timer _timer_opti;
+        double _time_loop;
+        double _time_exec;
+        double _time_opti;
 
-        // Robot controlled by this model
+        // Agent identifier assigned by the control mode
+        int _id = -1;
+
+        // Robot controlled by this behavior model
         FishBot* _robot = nullptr;
 
         // List of neighboring robots
@@ -177,6 +221,7 @@ namespace Fishmodel {
         elastic_band::ObstacleContainer      _obstacles;
         elastic_band::TrajectoryPtr          _trajectory_ref;
         elastic_band::TrajectoryPtr          _trajectory_opt;
+        std::shared_ptr<std::vector<size_t>> _fixed_poses;
         QMainWindow* _plot_pth_ref = new QMainWindow();
         QMainWindow* _plot_pth_opt = new QMainWindow();
         QMainWindow* _plot_pos_ref = new QMainWindow();
@@ -188,8 +233,17 @@ namespace Fishmodel {
         QMainWindow* _plot_acc_ref = new QMainWindow();
         QMainWindow* _plot_acc_opt = new QMainWindow();
 
+        // Log files and streams
+        QFile _logFileTrajectory;
+        QFile _logFileTracking;
+        QFile _logFileKicking;
+        QFile _logFileTiming;
+        QTextStream _logStreamTrajectory;
+        QTextStream _logStreamTracking;
+        QTextStream _logStreamKicking;
+        QTextStream _logStreamTiming;
+
         // Arena coordinates
-        CoordinatesConversionPtr _coordinatesConversion;
         const Coord_t ARENA_CENTER;
     };
 
