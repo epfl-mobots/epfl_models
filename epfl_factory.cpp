@@ -53,3 +53,31 @@ std::unique_ptr<Simulation> EpflSimulationFactory::create()
     }
     return std::move(sim);
 }
+
+Simulation* EpflSimulationFactory::createAndShare()
+{
+    _sim = new Simulation(arena);
+    Simulation* sim(_sim);
+    currentTrajectoryIndex = 0;
+
+    // Create Agents
+    for (size_t i = 0; i < nbFishes; ++i) {
+        auto ab = _createAgent<FishAgent>(behaviorFishes);
+        sim->agents.push_back(
+            {std::shared_ptr<Agent>(ab.first), std::shared_ptr<Behavior>(ab.second)});
+        sim->fishes.push_back(ab);
+    }
+    for (size_t i = 0; i < nbRobots; ++i) {
+        auto ab = _createAgent<VirtualAgent>(behaviorRobots);
+        sim->agents.push_back(
+            {std::shared_ptr<Agent>(ab.first), std::shared_ptr<Behavior>(ab.second)});
+        sim->robots.push_back(ab);
+    }
+    for (size_t i = 0; i < nbVirtuals; ++i) {
+        auto ab = _createAgent<VirtualAgent>(behaviorVirtuals);
+        sim->agents.push_back(
+            {std::shared_ptr<Agent>(ab.first), std::shared_ptr<Behavior>(ab.second)});
+        sim->virtuals.push_back(ab);
+    }
+    return sim;
+}

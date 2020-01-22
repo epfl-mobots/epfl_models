@@ -45,6 +45,7 @@ namespace Fishmodel {
     public:
         EpflSimulationFactory(Arena& _arena) : arena(_arena) {}
         std::unique_ptr<Simulation> create();
+        Simulation* createAndShare();
     };
 
 } // namespace Fishmodel
