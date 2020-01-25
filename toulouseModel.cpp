@@ -359,7 +359,7 @@ namespace Fishmodel {
         for (AgentDataWorld robot : _robot->otherRobotsData()) {
             if (robot.type() != AgentType::CASU){
                 continue;}
-            if (/*_robot->state().position().closeTo(robot.state().position(), neighboring_radius)*/true) {
+            if (false ? _robot->state().position().closeTo(robot.state().position(), neighboring_radius) : true) {
                 QString id = robot.id();
                 ToulouseModel* behavior = nullptr;
                 for (std::vector<AgentBehavior_t>::const_iterator rob = _simulation.robots.begin(); rob != _simulation.robots.end(); ++rob) {
@@ -421,7 +421,7 @@ namespace Fishmodel {
         if (!_trajectory_opt->trajectory().empty() && _time > _trajectory_opt->trajectory().back()->timestamp().count())
             _time = _trajectory_opt->trajectory().back()->timestamp().count();
         pose      = elastic_band::PoseSE2(_position.x, _position.y, _orientation);
-        velocity  = elastic_band::Velocity(_robot->speed(), 0, _orientation);
+        velocity  = elastic_band::Velocity(Eigen::Vector2d(_speed.vx, _speed.vy).norm(), 0, _orientation);
         timestamp = elastic_band::Timestamp(elastic_band::timestamp_t(_time));
     }
 
@@ -430,7 +430,7 @@ namespace Fishmodel {
         const double timestep = TIMESTEP; // [s]
         const double horizon_control_loop = (15 + 1) * timestep; // [s]
         const double horizon_optimization = (15 + 1) * timestep; // [s]
-        const double horizon_modelization = _kick_duration/* - timestamp.count()*/; // [s]
+        const double horizon_modelization = _kick_duration - timestamp.count(); // [s]
         const double horizon = true ? horizon_optimization : std::max(std::min(horizon_modelization, horizon_optimization), horizon_control_loop); // [s]
         const size_t nb_commands = static_cast<size_t>(std::max(std::floor(horizon / timestep), 1.)); // [#]
 
@@ -950,8 +950,9 @@ namespace Fishmodel {
 
     void ToulouseModel::stimulate()
     {
-        _desired_position.x = _position.x + _kick_length * std::cos(_angular_direction);
-        _desired_position.y = _position.y + _kick_length * std::sin(_angular_direction);
+        const double anticipated_optim_time = 0.100; // TODO: tune the average optimization duration
+        _desired_position.x = _position.x + _speed.vx * anticipated_optim_time + _kick_length * std::cos(_angular_direction);
+        _desired_position.x = _position.y + _speed.vy * anticipated_optim_time + _kick_length * std::cos(_angular_direction);
 
         _desired_speed.vx = (_desired_position.x - _position.x) / _kick_duration;
         _desired_speed.vy = (_desired_position.y - _position.y) / _kick_duration;
@@ -1005,6 +1006,9 @@ namespace Fishmodel {
         std::tie(r_w, theta_w) = model_stepper(radius);
 
         // Compute the new target
+        // (anticipated feasibility check)
+        const double anticipated_optim_time = 0.100; // TODO: tune the average optimization duration
+        const double robot_add_body_length = 0.025; // TODO: tune the additional body length
         const double robot_safety_margin = 0.010;//0.030; // TODO: tune the safety margin
         const size_t max_count = 1000;
         size_t count = 0;
@@ -1014,9 +1018,9 @@ namespace Fishmodel {
             stepper();
 
             if (++count > max_count) {
-                //qDebug() << "stuck";
                 // Select a direction in reflection to the wall if stuck for too long
                 _angular_direction = -_orientation;
+                //qDebug() << "stuck";
             } else {
                 // Throw in some free will
                 free_will(state_t{distances, perception, thetas, phis},
@@ -1025,10 +1029,8 @@ namespace Fishmodel {
             }
 
             // Rejection test (do not want to hit the wall)
-            //qx = _position.x + (_kick_length + body_length) * std::cos(_angular_direction);
-            //qy = _position.y + (_kick_length + body_length) * std::sin(_angular_direction);
-            qx = _position.x + _speed.vx * 0.100 + (_kick_length + body_length + 0.025) * std::cos(_angular_direction); // TODO: tune the optimization time
-            qy = _position.y + _speed.vy * 0.100 + (_kick_length + body_length + 0.025) * std::sin(_angular_direction); // TODO: tune the optimization time
+            qx = _position.x + _speed.vx * anticipated_optim_time + (_kick_length + body_length + robot_add_body_length) * std::cos(_angular_direction);
+            qy = _position.y + _speed.vy * anticipated_optim_time + (_kick_length + body_length + robot_add_body_length) * std::sin(_angular_direction);
 
             //qDebug() << std::sqrt(qx * qx + qy * qy) << qx << qy << _position.x << _position.y;
         } while (std::sqrt(qx * qx + qy * qy) > radius - robot_safety_margin);
@@ -1099,7 +1101,7 @@ namespace Fishmodel {
         if (current_velocity + vel_diff < _config.robot.max_vel_x) {
             size_t count = 0;
             do {
-                bb = std::sqrt(-2. * std::log(simu::tools::random_in_range(.0 + 1.0e-16, 1.)));
+                bb = std::sqrt(-2. * std::log(simu::tools::random_in_range(1.0e-16, 1.)));
                 _peak_velocity = velocity_coef * std::sqrt(2. / M_PI) * bb;
             } while (_peak_velocity < current_velocity + vel_diff && count++ < max_count);
             if (count >= max_count)
@@ -1110,10 +1112,10 @@ namespace Fishmodel {
             _peak_velocity = maximum_velocity;
         }
 
-        bb = std::sqrt(-2. * std::log(simu::tools::random_in_range(.0 + 1.0e-16, 1.)));
+        bb = std::sqrt(-2. * std::log(simu::tools::random_in_range(1.0e-16, 1.)));
         _kick_length = length_coef * std::sqrt(2. / M_PI) * bb;
 
-        bb = std::sqrt(-2. * std::log(simu::tools::random_in_range(.0 + 1.0e-16, 1.)));
+        bb = std::sqrt(-2. * std::log(simu::tools::random_in_range(1.0e-16, 1.)));
         _kick_duration = time_coef * std::sqrt(2. / M_PI) * bb;
 
         _kick_length = _peak_velocity * tau0 * (1. - std::exp(-_kick_duration / tau0));
@@ -1126,8 +1128,8 @@ namespace Fishmodel {
         std::tie(r_w, theta_w) = model_out;
         std::tie(distances, perception, thetas, phis) = state;
 
-        double g = std::sqrt(-2. * std::log(tools::random_in_range(0., 1.) + 1.0e-16))
-                 * std::sin(2. * M_PI * tools::random_in_range(0., 1.));
+        double g = std::sqrt(-2. * std::log(tools::random_in_range(1.0e-16, 1.)))
+                 * std::sin(2. * M_PI * tools::random_in_range(1.0e-16, 1.));
 
         double q = alpha * wall_distance_interaction(gamma_wall, wall_interaction_range, r_w, radius) / gamma_wall;
 
