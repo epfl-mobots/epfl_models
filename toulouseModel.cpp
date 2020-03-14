@@ -21,6 +21,10 @@
 #include <algorithm>
 
 #define TIMESTEP 0.020 // [s]
+#define AVERAGE_DELAY 0.040//0.065 // Control loop cycle duration [s]
+#define CHECK_SAFETY true
+#define STRAIGHT_LINE false
+#define NO_OPTIMIZATION true
 
 namespace Fishmodel {
 
@@ -253,8 +257,9 @@ namespace Fishmodel {
             //if (_robot->state().orientation().isValid()) // FIXME: should be always valid
                 _orientation = angle_to_pipi(_robot->state().orientation().angleRad());
             if (_robot->isValidSpeed()) {
-                _speed.vx = _robot->speed() * std::cos(_orientation);
-                _speed.vy = _robot->speed() * std::sin(_orientation);
+                const double speed = std::min(_robot->speed(), _config.robot.max_vel_x);
+                _speed.vx = speed * std::cos(_orientation);
+                _speed.vy = speed * std::sin(_orientation);
             }
         }
         //qDebug() << "robot" << _position.x << _position.y << _speed.vx << _speed.vy << _orientation;
@@ -357,8 +362,8 @@ namespace Fishmodel {
             return;
         const double neighboring_radius = 2 * radius;
         for (AgentDataWorld robot : _robot->otherRobotsData()) {
-            if (robot.type() != AgentType::CASU){
-                continue;}
+            if (robot.type() != AgentType::CASU)
+                continue;
             if (false ? _robot->state().position().closeTo(robot.state().position(), neighboring_radius) : true) {
                 QString id = robot.id();
                 ToulouseModel* behavior = nullptr;
@@ -431,14 +436,21 @@ namespace Fishmodel {
         const double horizon_control_loop = (15 + 1) * timestep; // [s]
         const double horizon_optimization = (15 + 1) * timestep; // [s]
         const double horizon_modelization = _kick_duration - timestamp.count(); // [s]
+#if CHECK_SAFETY
+        const double horizon = _is_kicking ? std::max(_kick_duration, horizon_optimization) : horizon_optimization; // [s]
+#else
         const double horizon = true ? horizon_optimization : std::max(std::min(horizon_modelization, horizon_optimization), horizon_control_loop); // [s]
+#endif
+#if CHECK_SAFETY
+        const size_t nb_configs  = static_cast<size_t>(std::max(std::floor(horizon_optimization / timestep), 1.)); // [#]
+#endif
         const size_t nb_commands = static_cast<size_t>(std::max(std::floor(horizon / timestep), 1.)); // [#]
 
         elastic_band::TimestepPtr       timestep_ptr(new elastic_band::Timestep(elastic_band::timestep_t(timestep)));
         elastic_band::TimestepContainer timestep_profile(nb_commands - 1, timestep_ptr);
         elastic_band:: PoseSE2Container     pose_profile(nb_commands);
 
-        const double acceleration = _config.robot.acc_lim_x - _config.optim.penalty_epsilon; // [m/s^2]
+        static const double acceleration = _config.robot.acc_lim_x - _config.optim.penalty_epsilon; // [m/s^2]
 
         static size_t burst_idx = 0;
         static size_t coast_idx = 0;
@@ -447,7 +459,9 @@ namespace Fishmodel {
         const size_t glide_p = glide_idx + 1;
         const size_t glide_v = glide_idx;
         const size_t glide_t = glide_idx;
-
+#if STRAIGHT_LINE
+        _is_gliding = false;
+#else
         _is_gliding = (_is_gliding
                     || (!_is_kicking
                      && !_trajectory_opt->trajectory().empty()
@@ -456,13 +470,16 @@ namespace Fishmodel {
                    && _trajectory_opt->trajectory().size() > glide_idx
                    && timestamp.count() < _trajectory_opt->trajectory().at(glide_idx)->timestamp().count()
                    && _trajectory_opt->trajectory().back()->timestamp().count() > _trajectory_opt->trajectory().at(glide_idx)->timestamp().count() + timestep;
-
+#endif
         const Eigen::Vector2d position_init = _is_gliding ? _trajectory_opt->trajectory().at(glide_p)->pose().position()        : pose.position();        // [m]
         const double       orientation_init = _is_gliding ? _trajectory_opt->trajectory().at(glide_p)->pose().orientation()     : pose.orientation();     // [rad]
         const double       translation_init = _is_gliding ? _trajectory_opt->trajectory().at(glide_v)->velocity().translation() : velocity.translation(); // [m/s]
         const double          rotation_init = _is_gliding ? _trajectory_opt->trajectory().at(glide_v)->velocity().rotation()    : velocity.rotation();    // [rad/s]
         const double          duration_init = _is_gliding ? _trajectory_opt->trajectory().at(glide_t)->timestamp().count()      : timestamp.count();      // [s]
-
+#if CHECK_SAFETY
+        bool is_trajectory_safe = !_is_kicking;
+        do {
+#endif
         static double duration = duration_init;
         static double duration_phase1 = duration;
         static double duration_phase2 = duration;
@@ -475,12 +492,12 @@ namespace Fishmodel {
         Eigen::Vector2d position_phase2 = position;
         Eigen::Vector2d position_phase3 = position;
         double theta = orientation_init;
-        double x = position.x();
-        double y = position.y();
+        double x = position_init.x();
+        double y = position_init.y();
 
-        const double Kp = 50.0;
-        const double Ki = 1.00;
-        const double Kd = 0.05;
+        static const double Kp = 50.0; // TODO: reduce the proportional gain for the rotation rate to be below the angular acceleration limit
+        static const double Ki = 1.00;
+        static const double Kd = 0.05;
         double error_old = 0;
         double error_new = 0;
         double error_dif = 0;
@@ -507,6 +524,10 @@ namespace Fishmodel {
         // Implement burst-and-coast swimming
         pose_profile.at(_is_gliding ? 1 : 0) = elastic_band::PoseSE2Ptr(new elastic_band::PoseSE2(x, y, theta));
         for (size_t i = _is_gliding ? 2 : 1; i < pose_profile.size(); ++i) {
+#if STRAIGHT_LINE
+            translation = 0.1;
+            position = Eigen::Vector2d(std::cos(theta), std::sin(theta)) * translation * timestep + position;
+#else
             duration = i * timestep + duration_init;
             if (duration_phase2 == 0 && duration_phase3 == 0 && std::abs(angle_to_pipi(_angular_direction - theta)) > 1e-2) { // 1. Orientation
                 duration_phase1 = duration;
@@ -557,6 +578,7 @@ namespace Fishmodel {
             } else {
                 position = Eigen::Vector2d(std::cos(theta), std::sin(theta)) * translation * timestep + position;
             }
+#endif
             x = position.x();
             y = position.y();
             pose_profile.at(i) = elastic_band::PoseSE2Ptr(new elastic_band::PoseSE2(x, y, theta));
@@ -575,6 +597,23 @@ namespace Fishmodel {
         _trajectory_ref->robotParameters().wheel_distance = 0.018; // [m]
         _trajectory_ref->setProfileTimestep(timestep_profile, timestamp, false);
         _trajectory_ref->setProfilePose(pose_profile);
+#if CHECK_SAFETY
+            if (_is_kicking) {
+                is_trajectory_safe = isTrajectorySafe();
+                qDebug() << "is_trajectory_safe =" << is_trajectory_safe;
+                if (!is_trajectory_safe) {
+                    interact();
+                    stimulate();
+                }
+            }
+        } while (_is_kicking && !is_trajectory_safe);
+#endif
+#if CHECK_SAFETY
+        // Remove useless configurations
+        if (nb_commands > nb_configs) {
+            _trajectory_ref->resize(nb_configs);
+        }
+#endif
     }
 
     void ToulouseModel::initializePlanner()
@@ -678,6 +717,14 @@ namespace Fishmodel {
         return feasible;
     }
 
+    bool ToulouseModel::isTrajectorySafe()
+    {
+        const double robot_safety_margin = 0.010;//0.030; // TODO: tune the safety margin
+        const bool safe = _trajectory_ref->trajectory().empty() ||
+                          _trajectory_ref->trajectory().back()->pose().position().norm() < radius - robot_safety_margin; // TODO: check trajectory safety
+        return safe;
+    }
+
     void ToulouseModel::visualizeReferenceTrajectory()
     {
         if (!_to_be_optimized)
@@ -711,11 +758,11 @@ namespace Fishmodel {
             }
         }
         for (size_t i = 0; i < trajectories.size(); ++i) {
-            _plot_pth_ref = elastic_band::TebPlot::plotPath               (&(*trajectories.at(i)), plots_pth.at(i), "Reference path"         + names.at(i));
-            _plot_pos_ref = elastic_band::TebPlot::plotProfilePose        (&(*trajectories.at(i)), plots_pos.at(i), "Reference pose"         + names.at(i));
-            _plot_spd_ref = elastic_band::TebPlot::plotProfileSpeed       (&(*trajectories.at(i)), plots_spd.at(i), "Reference speed"        + names.at(i));
-            _plot_vel_ref = elastic_band::TebPlot::plotProfileVelocity    (&(*trajectories.at(i)), plots_vel.at(i), "Reference velocity"     + names.at(i));
-            _plot_acc_ref = elastic_band::TebPlot::plotProfileAcceleration(&(*trajectories.at(i)), plots_acc.at(i), "Reference acceleration" + names.at(i));
+            //plots_pth.at(i) = elastic_band::TebPlot::plotPath               (&(*trajectories.at(i)), plots_pth.at(i), "Reference path"         + names.at(i));
+            //plots_pos.at(i) = elastic_band::TebPlot::plotProfilePose        (&(*trajectories.at(i)), plots_pos.at(i), "Reference pose"         + names.at(i));
+            //plots_spd.at(i) = elastic_band::TebPlot::plotProfileSpeed       (&(*trajectories.at(i)), plots_spd.at(i), "Reference speed"        + names.at(i));
+            plots_vel.at(i) = elastic_band::TebPlot::plotProfileVelocity    (&(*trajectories.at(i)), plots_vel.at(i), "Reference velocity"     + names.at(i));
+            //plots_acc.at(i) = elastic_band::TebPlot::plotProfileAcceleration(&(*trajectories.at(i)), plots_acc.at(i), "Reference acceleration" + names.at(i));
         }
     }
 
@@ -752,11 +799,11 @@ namespace Fishmodel {
             }
         }
         for (size_t i = 0; i < trajectories.size(); ++i) {
-            _plot_pth_ref = elastic_band::TebPlot::plotPath               (&(*trajectories.at(i)), plots_pth.at(i), "Optimized path"         + names.at(i));
-            _plot_pos_ref = elastic_band::TebPlot::plotProfilePose        (&(*trajectories.at(i)), plots_pos.at(i), "Optimized pose"         + names.at(i));
-            _plot_spd_ref = elastic_band::TebPlot::plotProfileSpeed       (&(*trajectories.at(i)), plots_spd.at(i), "Optimized speed"        + names.at(i));
-            _plot_vel_ref = elastic_band::TebPlot::plotProfileVelocity    (&(*trajectories.at(i)), plots_vel.at(i), "Optimized velocity"     + names.at(i));
-            _plot_acc_ref = elastic_band::TebPlot::plotProfileAcceleration(&(*trajectories.at(i)), plots_acc.at(i), "Optimized acceleration" + names.at(i));
+            //plots_pth.at(i) = elastic_band::TebPlot::plotPath               (&(*trajectories.at(i)), plots_pth.at(i), "Optimized path"         + names.at(i));
+            //plots_pos.at(i) = elastic_band::TebPlot::plotProfilePose        (&(*trajectories.at(i)), plots_pos.at(i), "Optimized pose"         + names.at(i));
+            //plots_spd.at(i) = elastic_band::TebPlot::plotProfileSpeed       (&(*trajectories.at(i)), plots_spd.at(i), "Optimized speed"        + names.at(i));
+            plots_vel.at(i) = elastic_band::TebPlot::plotProfileVelocity    (&(*trajectories.at(i)), plots_vel.at(i), "Optimized velocity"     + names.at(i));
+            //plots_acc.at(i) = elastic_band::TebPlot::plotProfileAcceleration(&(*trajectories.at(i)), plots_acc.at(i), "Optimized acceleration" + names.at(i));
         }
     }
 
@@ -893,7 +940,7 @@ namespace Fishmodel {
     void ToulouseModel::logDataWrite()
     {
         const QString sep("\t");
-
+/*
         // Write the trajectory data
         if (_logFileTrajectory.isOpen() && !_trajectory_opt->trajectory().empty()) {
             for (size_t i = 0; i < _trajectory_opt->trajectory().size(); ++i) {
@@ -926,7 +973,7 @@ namespace Fishmodel {
                               << _desired_position.x << sep
                               << _desired_position.y << endl;
         }
-
+*/
         // Write the timing data
         if (_logFileTiming.isOpen() && _to_be_optimized) {
             _logStreamTiming << _time_loop << sep
@@ -950,7 +997,7 @@ namespace Fishmodel {
 
     void ToulouseModel::stimulate()
     {
-        const double anticipated_optim_time = 0.100; // TODO: tune the average optimization duration
+        const double anticipated_optim_time = AVERAGE_DELAY;//0.100; // TODO: tune the average optimization duration
         _desired_position.x = _position.x + _speed.vx * anticipated_optim_time + _kick_length * std::cos(_angular_direction);
         _desired_position.x = _position.y + _speed.vy * anticipated_optim_time + _kick_length * std::cos(_angular_direction);
 
@@ -1007,7 +1054,11 @@ namespace Fishmodel {
 
         // Compute the new target
         // (anticipated feasibility check)
-        const double anticipated_optim_time = 0.100; // TODO: tune the average optimization duration
+#if NO_OPTIMIZATION
+        const double anticipated_optim_time = 0;//0.100; // TODO: tune the average optimization duration
+#else
+        const double anticipated_optim_time = AVERAGE_DELAY;//0.100; // TODO: tune the average optimization duration
+#endif
         const double robot_add_body_length = 0.025; // TODO: tune the additional body length
         const double robot_safety_margin = 0.010;//0.030; // TODO: tune the safety margin
         const size_t max_count = 1000;

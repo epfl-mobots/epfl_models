@@ -154,6 +154,7 @@ namespace Fishmodel {
         void computePerformance();
         bool isTrajectoryOptimized();
         bool isTrajectoryFeasible();
+        bool isTrajectorySafe();
         void visualizeReferenceTrajectory();
         void visualizeOptimizedTrajectory();
 
